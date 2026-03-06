@@ -1,0 +1,375 @@
+---
+title: "Comment Hooks"
+description: "Fetch and post comments on news articles"
+---
+
+## Overview
+
+TUNA provides two hooks for comment management:
+- `useArticleComments` - Fetch comments for a specific article
+- `usePostComment` - Post a new comment to an article
+
+---
+
+## useArticleComments
+
+Fetch all comments for a specific news article from the Sui blockchain.
+
+### Function Signature
+
+```typescript
+function useArticleComments(blobId: string): UseQueryResult<Comment[], Error>
+```
+
+### Parameters
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article to fetch comments for
+</ParamField>
+
+### Return Type
+
+<ResponseField name="data" type="Comment[]">
+  Array of comments sorted by timestamp (newest first)
+
+  <ResponseField name="id" type="string">
+    Unique comment object ID on Sui
+  </ResponseField>
+
+  <ResponseField name="blobId" type="string">
+    The article's blob ID this comment belongs to
+  </ResponseField>
+
+  <ResponseField name="author" type="string">
+    Sui address of the comment author
+  </ResponseField>
+
+  <ResponseField name="text" type="string">
+    Comment text content
+  </ResponseField>
+
+  <ResponseField name="timestamp" type="number">
+    Unix timestamp when the comment was posted
+  </ResponseField>
+
+  <ResponseField name="tipsReceived" type="number">
+    Total tips received by this comment in SUI tokens
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Whether the query is currently loading
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  Error object if the query failed
+</ResponseField>
+
+### Usage
+
+<CodeGroup>
+
+```tsx Basic Usage
+import { useArticleComments } from '@tuna/sdk';
+
+function CommentList({ articleBlobId }: { articleBlobId: string }) {
+  const { data: comments, isLoading, error } = useArticleComments(articleBlobId);
+
+  if (isLoading) return <div>Loading comments...</div>;
+  if (error) return <div>Failed to load comments</div>;
+  if (!comments?.length) return <div>No comments yet</div>;
+
+  return (
+    <div>
+      <h3>{comments.length} Comments</h3>
+      {comments.map((comment) => (
+        <div key={comment.id}>
+          <p>{comment.text}</p>
+          <small>
+            By {comment.author.slice(0, 6)}...{comment.author.slice(-4)}
+          </small>
+          <small>💰 {comment.tipsReceived} SUI</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+```tsx With Timestamps
+import { useArticleComments } from '@tuna/sdk';
+
+function CommentThread({ blobId }: { blobId: string }) {
+  const { data: comments } = useArticleComments(blobId);
+
+  return (
+    <div>
+      {comments?.map((comment) => {
+        const date = new Date(comment.timestamp * 1000);
+        
+        return (
+          <div key={comment.id}>
+            <p>{comment.text}</p>
+            <time>{date.toLocaleString()}</time>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+### Query Configuration
+
+- **Query Key**: `['comments', blobId]`
+- **Stale Time**: 0 (always refetch)
+- **Refetch on Window Focus**: Enabled
+- **Enabled**: Only when `blobId` is provided
+
+<Note>
+  Comments are automatically refetched when the window regains focus to ensure you see the latest discussions.
+</Note>
+
+---
+
+## usePostComment
+
+Post a new comment to an article. Requires a connected Sui wallet.
+
+### Function Signature
+
+```typescript
+function usePostComment(): UseMutationResult<void, Error, { blobId: string, text: string }>
+```
+
+### Parameters
+
+This hook returns a mutation object. Call the `mutate` function with:
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article to comment on
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  The comment text content
+</ParamField>
+
+### Return Type
+
+<ResponseField name="mutate" type="(variables: { blobId: string, text: string }) => void">
+  Function to trigger the comment post transaction
+</ResponseField>
+
+<ResponseField name="mutateAsync" type="(variables: { blobId: string, text: string }) => Promise<void>">
+  Async version of mutate that returns a Promise
+</ResponseField>
+
+<ResponseField name="isPending" type="boolean">
+  Whether the mutation is currently in progress
+</ResponseField>
+
+<ResponseField name="isSuccess" type="boolean">
+  Whether the mutation completed successfully
+</ResponseField>
+
+<ResponseField name="isError" type="boolean">
+  Whether the mutation encountered an error
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  Error object if the mutation failed
+</ResponseField>
+
+### Usage
+
+<CodeGroup>
+
+```tsx Basic Form
+import { usePostComment } from '@tuna/sdk';
+import { useState } from 'react';
+
+function CommentForm({ articleBlobId }: { articleBlobId: string }) {
+  const [text, setText] = useState('');
+  const { mutate, isPending, isError } = usePostComment();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutate(
+      { blobId: articleBlobId, text },
+      {
+        onSuccess: () => {
+          setText(''); // Clear form
+          alert('Comment posted!');
+        }
+      }
+    );
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Write a comment..."
+        disabled={isPending}
+      />
+      <button type="submit" disabled={isPending || !text.trim()}>
+        {isPending ? 'Posting...' : 'Post Comment'}
+      </button>
+      {isError && <p>Failed to post comment. Please try again.</p>}
+    </form>
+  );
+}
+```
+
+```tsx With Async Handling
+import { usePostComment } from '@tuna/sdk';
+import { useState } from 'react';
+
+function AsyncCommentForm({ blobId }: { blobId: string }) {
+  const [text, setText] = useState('');
+  const { mutateAsync, isPending } = usePostComment();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      await mutateAsync({ blobId, text });
+      setText('');
+      console.log('Comment posted successfully');
+    } catch (error) {
+      console.error('Failed to post comment:', error);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        maxLength={500}
+      />
+      <button type="submit" disabled={isPending}>
+        Post
+      </button>
+    </form>
+  );
+}
+```
+
+```tsx With Status Messages
+import { usePostComment } from '@tuna/sdk';
+import { useState } from 'react';
+
+function CommentFormWithStatus({ blobId }: { blobId: string }) {
+  const [text, setText] = useState('');
+  const { mutate, isPending, isSuccess, isError, error } = usePostComment();
+
+  return (
+    <div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Share your thoughts..."
+      />
+      
+      <button
+        onClick={() => mutate({ blobId, text })}
+        disabled={isPending || !text.trim()}
+      >
+        {isPending ? 'Posting...' : 'Post Comment'}
+      </button>
+
+      {isSuccess && <p style={{ color: 'green' }}>Comment posted!</p>}
+      {isError && (
+        <p style={{ color: 'red' }}>
+          Error: {error?.message || 'Failed to post comment'}
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+### Automatic Cache Updates
+
+When a comment is successfully posted, the hook automatically:
+
+1. Invalidates the comments query for that article
+2. Invalidates the article query to update comment count
+3. Waits 2 seconds for blockchain indexing before refetching
+
+```typescript
+// This happens automatically - no action needed
+onSuccess: (_, variables) => {
+  queryClient.invalidateQueries({ queryKey: ['comments', variables.blobId] });
+  queryClient.invalidateQueries({ queryKey: ['article', variables.blobId] });
+}
+```
+
+<Note>
+  A connected Sui wallet is required to post comments. The hook will throw an error if no wallet is connected.
+</Note>
+
+## Error Handling
+
+<CodeGroup>
+
+```tsx Check Wallet Connection
+import { useCurrentAccount } from '@mysten/dapp-kit';
+import { usePostComment } from '@tuna/sdk';
+
+function CommentSection({ blobId }: { blobId: string }) {
+  const account = useCurrentAccount();
+  const { mutate } = usePostComment();
+
+  if (!account) {
+    return <div>Please connect your wallet to comment</div>;
+  }
+
+  return (
+    <button onClick={() => mutate({ blobId, text: 'Great article!' })}>
+      Post Comment
+    </button>
+  );
+}
+```
+
+```tsx Handle Transaction Errors
+import { usePostComment } from '@tuna/sdk';
+
+function RobustCommentForm({ blobId }: { blobId: string }) {
+  const { mutate, error } = usePostComment();
+
+  const handlePost = (text: string) => {
+    mutate(
+      { blobId, text },
+      {
+        onError: (error) => {
+          if (error.message.includes('not connected')) {
+            alert('Please connect your wallet first');
+          } else if (error.message.includes('insufficient')) {
+            alert('Insufficient gas to post comment');
+          } else {
+            alert('Transaction failed. Please try again.');
+          }
+        }
+      }
+    );
+  };
+
+  return <textarea onBlur={(e) => handlePost(e.target.value)} />;
+}
+```
+
+</CodeGroup>
+
+## See Also
+
+- [useArticle](/hooks/use-article) - Fetch article details including comment count
+- [Comment Type](/types#comment) - Full comment type definition
+- [Sui Wallet Integration](/integration/wallet) - Setting up wallet connection

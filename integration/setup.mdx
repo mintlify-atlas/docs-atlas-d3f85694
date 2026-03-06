@@ -1,0 +1,211 @@
+---
+title: 'Setup'
+description: 'Install dependencies and configure your TUNA integration'
+---
+
+# Setup
+
+This guide walks you through setting up your development environment to integrate with TUNA.
+
+## Installation
+
+<Steps>
+  <Step title="Install Sui SDK">
+    TUNA uses the official Sui TypeScript SDK for blockchain interactions.
+    
+    ```bash
+    npm install @mysten/sui.js
+    ```
+    
+    <Note>
+      If you're building transactions, you may also want `@mysten/sui` for the newer transaction builder API.
+    </Note>
+  </Step>
+  
+  <Step title="Optional: Install Sui Wallet Adapters">
+    For write operations (tips, comments), you'll need wallet integration.
+    
+    ```bash
+    npm install @mysten/dapp-kit @mysten/wallet-standard @tanstack/react-query
+    ```
+  </Step>
+</Steps>
+
+## Configuration
+
+Create a configuration file to store TUNA's contract addresses and network settings.
+
+### Basic Configuration
+
+For read-only operations (fetching news):
+
+```typescript config/tuna.ts
+const TUNA_CONFIG = {
+  // Sui Testnet RPC
+  RPC_URL: 'https://fullnode.testnet.sui.io:443',
+  
+  // TUNA Registry Object ID (REQUIRED)
+  REGISTRY_ID: '0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d',
+  
+  // Walrus Aggregator for content retrieval
+  WALRUS_AGGREGATOR: 'https://aggregator.walrus-testnet.walrus.space/v1',
+};
+
+export default TUNA_CONFIG;
+```
+
+### Full Configuration
+
+For applications that support write operations:
+
+```typescript config/tuna.ts
+// Contract configuration
+export const CONTRACT_CONFIG = {
+  PACKAGE_ID: '0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66',
+  REGISTRY_ID: '0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d',
+  MODULE_NAME: 'news_registry',
+} as const;
+
+// Network configuration
+export const NETWORK_CONFIG = {
+  NETWORK: 'testnet' as const,
+  RPC_URL: 'https://fullnode.testnet.sui.io:443',
+} as const;
+
+// Walrus configuration
+export const WALRUS_CONFIG = {
+  AGGREGATOR_URL: 'https://aggregator.walrus-testnet.walrus.space/v1',
+  // Multiple aggregators for fallback
+  AGGREGATORS: [
+    'https://walrus-testnet-aggregator.nodes.guru/v1',
+    'https://walrus-testnet-aggregator.stakely.io/v1',
+    'https://aggregator.walrus-testnet.walrus.space/v1',
+  ],
+} as const;
+
+// Constants
+export const CONSTANTS = {
+  MIN_TIP_AMOUNT: 1_000_000, // 0.001 SUI in MIST
+  MAX_PREVIEW_LENGTH: 280,
+} as const;
+```
+
+## Initialize Sui Client
+
+Create a Sui client instance to interact with the blockchain.
+
+<CodeGroup>
+
+```typescript client.ts
+import { SuiClient } from '@mysten/sui.js/client';
+import { NETWORK_CONFIG } from './config/tuna';
+
+// Create a reusable client instance
+export const suiClient = new SuiClient({ 
+  url: NETWORK_CONFIG.RPC_URL 
+});
+```
+
+```typescript client.ts (with custom timeout)
+import { SuiClient } from '@mysten/sui.js/client';
+import { NETWORK_CONFIG } from './config/tuna';
+
+// Create client with custom configuration
+export const suiClient = new SuiClient({ 
+  url: NETWORK_CONFIG.RPC_URL,
+  // Optional: customize request timeout
+  // timeout: 30000,
+});
+
+// Test the connection
+async function testConnection() {
+  try {
+    const chainId = await suiClient.getChainIdentifier();
+    console.log('Connected to Sui chain:', chainId);
+  } catch (error) {
+    console.error('Failed to connect:', error);
+  }
+}
+```
+
+</CodeGroup>
+
+## Environment Variables (Optional)
+
+For production deployments, use environment variables:
+
+```bash .env
+VITE_SUI_NETWORK=testnet
+VITE_SUI_RPC_URL=https://fullnode.testnet.sui.io:443
+VITE_PACKAGE_ID=0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66
+VITE_REGISTRY_ID=0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d
+VITE_WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space/v1
+```
+
+Then update your config:
+
+```typescript config/tuna.ts
+export const CONTRACT_CONFIG = {
+  PACKAGE_ID: import.meta.env.VITE_PACKAGE_ID || '0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66',
+  REGISTRY_ID: import.meta.env.VITE_REGISTRY_ID || '0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d',
+  MODULE_NAME: 'news_registry',
+} as const;
+```
+
+<Warning>
+  Never commit sensitive environment variables (private keys, API keys) to version control. Use `.gitignore` to exclude `.env` files.
+</Warning>
+
+## Verify Setup
+
+Test your configuration by fetching the registry object:
+
+```typescript test-setup.ts
+import { suiClient } from './client';
+import { CONTRACT_CONFIG } from './config/tuna';
+
+async function verifySetup() {
+  try {
+    // Fetch the TUNA registry
+    const registry = await suiClient.getObject({
+      id: CONTRACT_CONFIG.REGISTRY_ID,
+      options: { showContent: true },
+    });
+
+    if (registry.data?.content?.dataType === 'moveObject') {
+      const fields = registry.data.content.fields as any;
+      const articleCount = fields.latest_blobs?.length || 0;
+      
+      console.log('✅ Setup successful!');
+      console.log(`📰 Registry contains ${articleCount} articles`);
+    } else {
+      console.error('❌ Invalid registry object');
+    }
+  } catch (error) {
+    console.error('❌ Setup failed:', error);
+  }
+}
+
+verifySetup();
+```
+
+Run the test:
+
+```bash
+ts-node test-setup.ts
+```
+
+Expected output:
+
+```
+✅ Setup successful!
+📰 Registry contains 147 articles
+```
+
+## Next Steps
+
+With your environment configured, you're ready to start fetching news:
+
+<Card title="Fetching News" icon="download" href="/integration/fetching-news">
+  Learn how to retrieve and display TUNA articles
+</Card>

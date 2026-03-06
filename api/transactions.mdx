@@ -1,0 +1,528 @@
+---
+title: "Transaction Builders"
+description: "Transaction builder functions for TUNA smart contract interactions"
+---
+
+## Overview
+
+TUNA provides transaction builder functions to interact with the Sui smart contracts. These functions create programmable transaction blocks that can be executed using the Sui SDK.
+
+<Note>
+  All transaction builders return a `Transaction` object from `@mysten/sui/transactions` that must be signed and executed by the user's wallet.
+</Note>
+
+---
+
+## Tipping Transactions
+
+### createTipArticleTransaction
+
+Create a transaction to tip an article.
+
+```typescript
+function createTipArticleTransaction(
+  blobId: string,
+  amount: number
+): Transaction
+```
+
+**Parameters**
+
+<ResponseField name="blobId" type="string" required>
+  The article blob ID to tip
+</ResponseField>
+
+<ResponseField name="amount" type="number" required>
+  The tip amount in MIST (1 SUI = 1,000,000,000 MIST)
+</ResponseField>
+
+**Returns**
+
+`Transaction` - A Sui transaction object ready to be signed and executed
+
+**Example**
+
+```typescript
+import { createTipArticleTransaction, suiToMist } from '@/lib/sui';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+
+function TipButton({ blobId }: { blobId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  const handleTip = () => {
+    const amount = suiToMist(0.1); // 0.1 SUI
+    const tx = createTipArticleTransaction(blobId, amount);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Tip successful:', result.digest);
+        },
+      }
+    );
+  };
+
+  return <button onClick={handleTip}>Tip 0.1 SUI</button>;
+}
+```
+
+---
+
+### createTipCommentTransaction
+
+Create a transaction to tip a comment.
+
+```typescript
+function createTipCommentTransaction(
+  commentId: string,
+  amount: number
+): Transaction
+```
+
+**Parameters**
+
+<ResponseField name="commentId" type="string" required>
+  The comment object ID to tip
+</ResponseField>
+
+<ResponseField name="amount" type="number" required>
+  The tip amount in MIST
+</ResponseField>
+
+**Returns**
+
+`Transaction` - A Sui transaction object
+
+**Example**
+
+```typescript
+import { createTipCommentTransaction, CONSTANTS } from '@/lib/sui';
+
+const tx = createTipCommentTransaction(
+  '0xabc123...',
+  CONSTANTS.MIN_TIP_AMOUNT
+);
+```
+
+---
+
+## Comment Transactions
+
+### createPostCommentTransaction
+
+Create a transaction to post a short text comment (≤280 characters).
+
+```typescript
+function createPostCommentTransaction(
+  blobId: string,
+  commentText: string
+): Transaction
+```
+
+**Parameters**
+
+<ResponseField name="blobId" type="string" required>
+  The article blob ID to comment on
+</ResponseField>
+
+<ResponseField name="commentText" type="string" required>
+  The comment text (must be ≤280 characters)
+</ResponseField>
+
+**Returns**
+
+`Transaction` - A Sui transaction object
+
+**Example**
+
+```typescript
+import { createPostCommentTransaction } from '@/lib/sui';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+
+function CommentForm({ blobId }: { blobId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const [text, setText] = useState('');
+
+  const handleSubmit = () => {
+    if (text.length > 280) {
+      alert('Comment too long! Use long comment feature.');
+      return;
+    }
+
+    const tx = createPostCommentTransaction(blobId, text);
+    signAndExecute({ transaction: tx });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <textarea 
+        value={text} 
+        onChange={(e) => setText(e.target.value)}
+        maxLength={280}
+      />
+      <button type="submit">Post Comment</button>
+    </form>
+  );
+}
+```
+
+---
+
+### createPostCommentWithBlobTransaction
+
+Create a transaction to post a long comment or comment with media.
+
+```typescript
+function createPostCommentWithBlobTransaction(
+  blobId: string,
+  previewText: string,
+  contentBlobId: string,
+  commentType: 'text_long' | 'media'
+): Transaction
+```
+
+**Parameters**
+
+<ResponseField name="blobId" type="string" required>
+  The article blob ID to comment on
+</ResponseField>
+
+<ResponseField name="previewText" type="string" required>
+  Preview text (≤280 characters) shown in the feed
+</ResponseField>
+
+<ResponseField name="contentBlobId" type="string" required>
+  Walrus blob ID containing the full comment content
+</ResponseField>
+
+<ResponseField name="commentType" type="'text_long' | 'media'" required>
+  Type of comment:
+  - `text_long` - Long text comment
+  - `media` - Comment with media attachments
+</ResponseField>
+
+**Returns**
+
+`Transaction` - A Sui transaction object
+
+**Example**
+
+<CodeGroup>
+
+```typescript Long Text Comment
+import { uploadToWalrus } from '@/lib/walrus';
+import { createPostCommentWithBlobTransaction } from '@/lib/sui';
+import type { WalrusCommentContent } from '@/types';
+
+async function postLongComment(articleBlobId: string, longText: string) {
+  // 1. Upload full content to Walrus
+  const content: WalrusCommentContent = {
+    text: longText,
+    timestamp: Date.now(),
+  };
+  
+  const contentBlobId = await uploadToWalrus(content);
+  
+  // 2. Create preview (first 280 chars)
+  const previewText = longText.slice(0, 280) + '...';
+  
+  // 3. Create transaction
+  const tx = createPostCommentWithBlobTransaction(
+    articleBlobId,
+    previewText,
+    contentBlobId,
+    'text_long'
+  );
+  
+  return tx;
+}
+```
+
+```typescript Media Comment
+import { uploadToWalrus, uploadImageToWalrus } from '@/lib/walrus';
+import { createPostCommentWithBlobTransaction } from '@/lib/sui';
+import type { WalrusCommentContent } from '@/types';
+
+async function postMediaComment(
+  articleBlobId: string,
+  text: string,
+  imageFile: File
+) {
+  // 1. Upload image to Walrus
+  const imageBlobId = await uploadImageToWalrus(imageFile);
+  
+  // 2. Create full content with media
+  const content: WalrusCommentContent = {
+    text,
+    media: [
+      {
+        type: 'image',
+        url: imageBlobId,
+        caption: 'My image',
+      },
+    ],
+    timestamp: Date.now(),
+  };
+  
+  // 3. Upload content to Walrus
+  const contentBlobId = await uploadToWalrus(content);
+  
+  // 4. Create transaction
+  const tx = createPostCommentWithBlobTransaction(
+    articleBlobId,
+    text.slice(0, 280),
+    contentBlobId,
+    'media'
+  );
+  
+  return tx;
+}
+```
+
+</CodeGroup>
+
+---
+
+## Withdrawal Transactions
+
+### createWithdrawCommentTipsTransaction
+
+Create a transaction to withdraw accumulated tips from a comment you authored.
+
+```typescript
+function createWithdrawCommentTipsTransaction(
+  commentId: string
+): Transaction
+```
+
+**Parameters**
+
+<ResponseField name="commentId" type="string" required>
+  The comment object ID to withdraw tips from
+</ResponseField>
+
+**Returns**
+
+`Transaction` - A Sui transaction object
+
+**Example**
+
+```typescript
+import { createWithdrawCommentTipsTransaction } from '@/lib/sui';
+
+function WithdrawButton({ commentId, tipsReceived }: Props) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  const handleWithdraw = () => {
+    const tx = createWithdrawCommentTipsTransaction(commentId);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: () => {
+          console.log('Tips withdrawn!');
+        },
+      }
+    );
+  };
+
+  if (tipsReceived === 0) return null;
+
+  return (
+    <button onClick={handleWithdraw}>
+      Withdraw {formatSui(tipsReceived)}
+    </button>
+  );
+}
+```
+
+---
+
+## Utility Functions
+
+### isValidTipAmount
+
+Validate if a tip amount meets the minimum requirement.
+
+```typescript
+function isValidTipAmount(amount: number): boolean
+```
+
+**Parameters**
+
+<ResponseField name="amount" type="number" required>
+  Amount in MIST to validate
+</ResponseField>
+
+**Returns**
+
+`boolean` - True if amount is valid (≥ 0.001 SUI)
+
+**Example**
+
+```typescript
+import { isValidTipAmount, CONSTANTS } from '@/lib/sui';
+
+const amount = 500_000; // 0.0005 SUI
+if (!isValidTipAmount(amount)) {
+  console.log(`Minimum tip is ${CONSTANTS.MIN_TIP_AMOUNT} MIST`);
+}
+```
+
+---
+
+### suiToMist
+
+Convert SUI to MIST.
+
+```typescript
+function suiToMist(sui: number): number
+```
+
+**Parameters**
+
+<ResponseField name="sui" type="number" required>
+  Amount in SUI
+</ResponseField>
+
+**Returns**
+
+`number` - Amount in MIST
+
+**Example**
+
+```typescript
+import { suiToMist } from '@/lib/sui';
+
+const mist = suiToMist(1); // 1_000_000_000
+const smallTip = suiToMist(0.01); // 10_000_000
+```
+
+---
+
+### mistToSui
+
+Convert MIST to SUI.
+
+```typescript
+function mistToSui(mist: number): number
+```
+
+**Parameters**
+
+<ResponseField name="mist" type="number" required>
+  Amount in MIST
+</ResponseField>
+
+**Returns**
+
+`number` - Amount in SUI
+
+**Example**
+
+```typescript
+import { mistToSui } from '@/lib/sui';
+
+const sui = mistToSui(1_000_000_000); // 1
+const smallAmount = mistToSui(10_000_000); // 0.01
+```
+
+---
+
+### formatSui
+
+Format a MIST amount for display.
+
+```typescript
+function formatSui(mist: number): string
+```
+
+**Parameters**
+
+<ResponseField name="mist" type="number" required>
+  Amount in MIST
+</ResponseField>
+
+**Returns**
+
+`string` - Formatted string with "SUI" suffix
+
+**Formatting Rules**
+
+- Less than 0.001 SUI: `"< 0.001 SUI"`
+- Less than 1 SUI: 3 decimal places (e.g., `"0.123 SUI"`)
+- 1 SUI or more: 2 decimal places (e.g., `"12.34 SUI"`)
+
+**Example**
+
+```typescript
+import { formatSui } from '@/lib/sui';
+
+formatSui(100); // "< 0.001 SUI"
+formatSui(10_000_000); // "0.010 SUI"
+formatSui(1_234_567_890); // "1.23 SUI"
+formatSui(12_340_000_000); // "12.34 SUI"
+```
+
+---
+
+## Complete Example
+
+Here's a complete example showing how to create and execute a tip transaction:
+
+```typescript
+import { useState } from 'react';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { 
+  createTipArticleTransaction,
+  suiToMist,
+  isValidTipAmount,
+  formatSui 
+} from '@/lib/sui';
+
+function TipArticle({ blobId }: { blobId: string }) {
+  const [amount, setAmount] = useState(0.1);
+  const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
+
+  const handleTip = () => {
+    const amountInMist = suiToMist(amount);
+    
+    if (!isValidTipAmount(amountInMist)) {
+      alert('Minimum tip is 0.001 SUI');
+      return;
+    }
+
+    const tx = createTipArticleTransaction(blobId, amountInMist);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Transaction successful:', result.digest);
+          alert(`Tipped ${formatSui(amountInMist)}!`);
+        },
+        onError: (error) => {
+          console.error('Transaction failed:', error);
+          alert('Failed to send tip');
+        },
+      }
+    );
+  };
+
+  return (
+    <div>
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(Number(e.target.value))}
+        min={0.001}
+        step={0.001}
+      />
+      <button onClick={handleTip} disabled={isPending}>
+        {isPending ? 'Sending...' : `Tip ${amount} SUI`}
+      </button>
+    </div>
+  );
+}
+```

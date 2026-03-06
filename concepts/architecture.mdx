@@ -1,0 +1,217 @@
+---
+title: System Architecture
+description: Understanding how TUNA's decentralized architecture combines Sui blockchain, Walrus storage, and React to create a permissionless news aggregator
+---
+
+## Overview
+
+TUNA is built on a dual-layer architecture that separates concerns between **indexing** and **storage**. This design enables a truly decentralized and permissionless news aggregation system.
+
+<CardGroup cols={2}>
+  <Card title="Sui Blockchain" icon="link">
+    Provides the on-chain index via the NewsRegistry smart contract
+  </Card>
+  <Card title="Walrus Storage" icon="database">
+    Stores the actual article content in decentralized blob storage
+  </Card>
+</CardGroup>
+
+## Two-Layer Architecture
+
+### Layer 1: The Index (Sui Blockchain)
+
+The **NewsRegistry** is a Shared Object on Sui that maintains a vector (array) of blob IDs. Think of it as a decentralized pointer system:
+
+- **Registry Object ID**: `0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d`
+- **Package ID**: `0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66`
+- **Module**: `news_registry`
+
+<Info>
+Reading from the registry is **free** and **permissionless** - no wallet or SUI tokens required!
+</Info>
+
+### Layer 2: The Content (Walrus)
+
+All article JSON data is stored as immutable blobs on the Walrus decentralized storage network:
+
+```typescript
+interface WalrusArticleContent {
+  title: string;
+  content: string;          // HTML string
+  summary?: string;
+  source: string;           // e.g., "twitter", "rss", "onchain"
+  url?: string;             // Original link
+  image?: string;           // Cover image URL
+  author?: string;
+  timestamp: number;
+}
+```
+
+## Data Flow
+
+Here's how applications fetch news from TUNA:
+
+<Steps>
+  <Step title="Query Sui Registry">
+    Fetch the NewsRegistry object to get the list of blob IDs
+    
+    ```typescript
+    const registry = await suiClient.getObject({
+      id: REGISTRY_ID,
+      options: { showContent: true }
+    });
+    
+    const blobIds = registry.data.content.fields.latest_blobs;
+    ```
+  </Step>
+  
+  <Step title="Extract Blob IDs">
+    The `latest_blobs` field contains an array of Walrus blob IDs, ordered chronologically
+    
+    ```typescript
+    // Get most recent 20 articles (newest first)
+    const recentBlobIds = blobIds.slice(-20).reverse();
+    ```
+  </Step>
+  
+  <Step title="Fetch from Walrus">
+    Retrieve actual article JSON from Walrus aggregators
+    
+    ```typescript
+    const article = await fetch(
+      `https://aggregator.walrus-testnet.walrus.space/v1/${blobId}`
+    );
+    const data = await article.json();
+    ```
+  </Step>
+</Steps>
+
+## Component Architecture
+
+The TUNA frontend follows a modular React architecture:
+
+### Configuration Layer
+
+```typescript
+// src/config/index.ts
+export const CONTRACT_CONFIG = {
+  PACKAGE_ID: '0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66',
+  REGISTRY_ID: '0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d',
+  MODULE_NAME: 'news_registry',
+};
+
+export const WALRUS_CONFIG = {
+  PUBLISHER_URL: 'https://publisher.walrus-testnet.walrus.space/v1/store',
+  AGGREGATOR_URL: 'https://aggregator.walrus-testnet.walrus.space/v1',
+};
+```
+
+### Core Libraries
+
+<Accordion title="src/lib/sui.ts - Transaction Builders">
+  Provides functions to create Sui transactions for:
+  - Tipping articles: `createTipArticleTransaction()`
+  - Posting comments: `createPostCommentTransaction()`
+  - Posting comments with media: `createPostCommentWithBlobTransaction()`
+  - Tipping comments: `createTipCommentTransaction()`
+  
+  All transactions use the `@mysten/sui` Transaction builder pattern.
+</Accordion>
+
+<Accordion title="src/lib/walrus.ts - Storage Interface">
+  Handles all Walrus interactions with fallback logic:
+  - `uploadToWalrus()` - Upload content with 6 publisher endpoints
+  - `fetchFromWalrus()` - Fetch content with 6 aggregator endpoints
+  - `uploadImageToWalrus()` - Upload binary image files
+  - `getWalrusUrl()` - Generate public blob URLs
+</Accordion>
+
+### Data Hooks
+
+```typescript
+// src/hooks/useNews.ts
+export function useLatestNews(limit: number = 100) {
+  return useQuery({
+    queryKey: ['latestNews', limit],
+    queryFn: async () => {
+      // 1. Fetch registry from Sui
+      const registry = await suiClient.getObject({...});
+      
+      // 2. Extract blob IDs
+      const blobIds = fields.latest_blobs.slice(-limit).reverse();
+      
+      // 3. Fetch articles from Walrus in parallel
+      const articles = await Promise.all(
+        blobIds.map(async (blobId) => {
+          const content = await fetchFromWalrus(blobId);
+          const engagement = await getArticleEngagement(blobId);
+          return { ...content, ...engagement };
+        })
+      );
+      
+      return articles;
+    },
+  });
+}
+```
+
+## Why This Architecture?
+
+<CardGroup cols={2}>
+  <Card title="Scalability" icon="chart-line">
+    Sui only stores lightweight pointers, not full content. Storage scales horizontally on Walrus.
+  </Card>
+  
+  <Card title="Cost Efficiency" icon="dollar-sign">
+    Walrus storage is significantly cheaper than storing full articles on-chain.
+  </Card>
+  
+  <Card title="Immutability" icon="lock">
+    Once published, articles are permanent and censorship-resistant on both layers.
+  </Card>
+  
+  <Card title="Permissionless" icon="unlock">
+    Anyone can read the registry and fetch content without permissions or gas fees.
+  </Card>
+</CardGroup>
+
+## Network Configuration
+
+TUNA currently runs on **Sui Testnet** and **Walrus Testnet**:
+
+```typescript
+export const NETWORK_CONFIG = {
+  NETWORK: 'testnet',
+  RPC_URL: 'https://fullnode.testnet.sui.io:443',
+};
+```
+
+<Warning>
+This is a testnet deployment. For production use, deploy to Sui Mainnet and Walrus Mainnet with updated contract addresses.
+</Warning>
+
+## Integration Approach
+
+Developers can integrate TUNA in two ways:
+
+1. **Direct Integration**: Use the configuration and libraries to query the registry directly
+2. **Package Installation**: Import TUNA as a dependency and use the pre-built hooks
+
+Both approaches are permissionless and require no special access - just the Registry Object ID.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sui Integration" icon="link" href="/concepts/sui-integration">
+    Learn how transactions work on Sui
+  </Card>
+  <Card title="Walrus Storage" icon="database" href="/concepts/walrus-storage">
+    Deep dive into Walrus storage
+  </Card>
+  <Card title="NewsRegistry Contract" icon="file-contract" href="/concepts/news-registry">
+    Understand the smart contract
+  </Card>
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Start building with TUNA
+  </Card>
+</CardGroup>

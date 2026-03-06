@@ -1,0 +1,253 @@
+---
+title: News Feed
+description: Learn how TUNA's news feed fetches and displays articles from the Sui blockchain and Walrus storage
+---
+
+The TUNA news feed provides a decentralized content aggregation system that fetches articles from the Sui blockchain registry and retrieves full content from Walrus distributed storage.
+
+## Architecture Overview
+
+The news feed operates on a two-tier architecture:
+
+1. **On-chain Registry**: Stores article metadata and blob IDs on Sui blockchain
+2. **Walrus Storage**: Stores full article content in a decentralized manner
+
+<Note>
+This architecture ensures data availability while keeping on-chain costs minimal by storing only references on Sui.
+</Note>
+
+## Fetching Latest News
+
+The `useLatestNews` hook fetches articles from the registry and enriches them with engagement data.
+
+### Hook Usage
+
+```tsx
+import { useLatestNews } from '../hooks/useNews';
+
+function NewsFeed() {
+  const { data: articles, isLoading } = useLatestNews(100);
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      {articles?.map(article => (
+        <NewsCard key={article.id} article={article} />
+      ))}
+    </div>
+  );
+}
+```
+
+### Implementation Details
+
+The hook fetches data in three steps:
+
+<Steps>
+  <Step title="Fetch Registry">
+    Query the on-chain registry object to get the latest blob IDs:
+
+    ```typescript src/hooks/useNews.ts
+    const registry = await suiClient.getObject({
+      id: CONTRACT_CONFIG.REGISTRY_ID,
+      options: { showContent: true },
+    });
+
+    const fields = registry.data.content.fields as any;
+    const latestBlobs = fields.latest_blobs as string[];
+
+    // Get latest articles (newest first)
+    const blobsToFetch = latestBlobs.slice(-limit).reverse();
+    ```
+  </Step>
+
+  <Step title="Fetch from Walrus">
+    Retrieve full article content from Walrus using blob IDs:
+
+    ```typescript src/hooks/useNews.ts
+    const walrusContent = await fetchFromWalrus<WalrusArticleContent>(blobId);
+    ```
+  </Step>
+
+  <Step title="Get Engagement Data">
+    Fetch tips, comments, and engagement metrics from the registry:
+
+    ```typescript src/hooks/useNews.ts
+    const engagement = await getArticleEngagement(blobId);
+
+    return {
+      id: blobId,
+      title: walrusContent.title,
+      content: walrusContent.content,
+      ...engagement, // totalTips, tipCount, commentCount
+    };
+    ```
+  </Step>
+</Steps>
+
+## Walrus Integration
+
+Walrus provides decentralized storage with automatic fallback to multiple aggregators.
+
+### Fetching from Walrus
+
+```typescript src/lib/walrus.ts
+const WALRUS_AGGREGATORS = [
+  'https://walrus-testnet-aggregator.nodes.guru/v1/blobs',
+  'https://walrus-testnet-aggregator.stakely.io/v1/blobs',
+  'https://aggregator.walrus-testnet.walrus.space/v1/blobs',
+  'https://walrus-testnet-aggregator.everstake.one/v1/blobs',
+];
+
+export async function fetchFromWalrus<T = any>(blobId: string): Promise<T> {
+  for (const aggregatorBase of WALRUS_AGGREGATORS) {
+    try {
+      const response = await fetch(`${aggregatorBase}/${blobId}`);
+      if (!response.ok) throw new Error(`${response.status}`);
+      return await response.json();
+    } catch (error) {
+      // Try next aggregator
+      continue;
+    }
+  }
+  throw new Error('Walrus fetch failed on all aggregators');
+}
+```
+
+<Tip>
+Walrus automatically tries multiple aggregators for redundancy. If one fails, it seamlessly falls back to the next available endpoint.
+</Tip>
+
+## Article Data Structure
+
+Articles contain rich metadata fetched from both Sui and Walrus:
+
+```typescript
+interface NewsArticle {
+  id: string;              // Blob ID
+  blob_id: string;         // Walrus blob identifier
+  title: string;           // Article title
+  category: string;        // Content category
+  source: 'twitter' | 'rss' | 'onchain';
+  timestamp: number;       // Publication time
+  content: string;         // Full article text
+  summary: string;         // Short description
+  url?: string;            // Original source URL
+  image?: string;          // Header image URL
+  author?: string;         // Content author
+  totalTips: number;       // Tips received in MIST
+  tipCount: number;        // Number of tips
+  commentCount: number;    // Number of comments
+}
+```
+
+## Rendering Articles
+
+The `NewsCard` component displays articles with engagement actions:
+
+```tsx src/components/NewsCard.tsx
+export default function NewsCard({ article }: NewsCardProps) {
+  const [isTipModalOpen, setIsTipModalOpen] = useState(false);
+
+  return (
+    <div className="card-brutal">
+      <Link to={`/article/${article.id}`}>
+        <h3>{article.title}</h3>
+      </Link>
+      
+      <p>{article.summary || article.content?.substring(0, 150)}</p>
+      
+      <div>
+        <button onClick={() => setIsTipModalOpen(true)}>
+          💰 TIP
+        </button>
+        
+        <Link to={`/article/${article.id}`}>
+          READ ↗
+        </Link>
+        
+        <div>
+          <span>💬 {article.commentCount || 0}</span>
+          <span>💰 {article.totalTips || 0} SUI</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Filtering and Sorting
+
+Articles are automatically sorted with newest content first:
+
+```typescript src/hooks/useNews.ts
+// Slice from the end to get latest, then reverse for newest-first display
+const blobsToFetch = latestBlobs.slice(-limit).reverse();
+```
+
+### Category Filtering
+
+```typescript src/hooks/useNews.ts
+export function useNewsByCategory(category: string, limit: number = 50) {
+  return useQuery({
+    queryKey: ['newsByCategory', category, limit],
+    queryFn: async (): Promise<NewsArticle[]> => {
+      // Fetch category-specific articles
+      return [];
+    },
+    enabled: !!category,
+  });
+}
+```
+
+## Query Configuration
+
+The hook uses React Query for efficient data caching:
+
+```typescript src/hooks/useNews.ts
+return useQuery({
+  queryKey: ['latestNews', limit],
+  queryFn: async (): Promise<NewsArticle[]> => {
+    // Fetch logic
+  },
+  staleTime: 30000, // Cache for 30 seconds
+});
+```
+
+<Note>
+Data is cached for 30 seconds to reduce unnecessary blockchain queries while keeping content fresh.
+</Note>
+
+## Error Handling
+
+The system gracefully handles failures:
+
+```typescript src/hooks/useNews.ts
+const articles = await Promise.all(
+  blobsToFetch.map(async (blobId) => {
+    try {
+      const walrusContent = await fetchFromWalrus<WalrusArticleContent>(blobId);
+      const engagement = await getArticleEngagement(blobId);
+      return { /* article data */ };
+    } catch (error) {
+      console.error(`Error fetching article ${blobId}:`, error);
+      return null;
+    }
+  })
+);
+
+// Filter out failed fetches
+return articles.filter(article => article !== null);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Article Tipping" icon="coins" href="/features/article-tipping">
+    Learn how to tip articles with SUI tokens
+  </Card>
+  <Card title="Comments" icon="comments" href="/features/comments">
+    Add comments to articles
+  </Card>
+</CardGroup>

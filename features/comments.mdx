@@ -1,0 +1,504 @@
+---
+title: Comments
+description: Implement TUNA's decentralized commenting system with support for short and long-form comments
+---
+
+TUNA provides a robust commenting system that stores short comments directly on-chain and uses Walrus for longer comments, optimizing for both cost and flexibility.
+
+## Comment Architecture
+
+TUNA supports two types of comments:
+
+<CardGroup cols={2}>
+  <Card title="Short Comments" icon="message">
+    ≤280 characters stored entirely on-chain
+  </Card>
+  <Card title="Long Comments" icon="file-text">
+    >280 characters with preview on-chain, full text in Walrus
+  </Card>
+</CardGroup>
+
+<Note>
+The 280-character threshold balances on-chain storage costs with user experience, similar to Twitter's original limit.
+</Note>
+
+## Fetching Comments
+
+The `useArticleComments` hook retrieves all comments for an article:
+
+```tsx
+import { useArticleComments } from '../hooks/useComments';
+
+function CommentSection({ articleId }: { articleId: string }) {
+  const { data: comments, isLoading } = useArticleComments(articleId);
+
+  if (isLoading) return <div>Loading comments...</div>;
+
+  return (
+    <div>
+      {comments?.map(comment => (
+        <CommentItem key={comment.id} comment={comment} />
+      ))}
+    </div>
+  );
+}
+```
+
+## Comment Fetching Process
+
+Comments are fetched in three steps:
+
+<Steps>
+  <Step title="Get Comment IDs from Registry">
+    Query the engagement map to find all comment IDs for an article:
+
+    ```typescript src/hooks/useComments.ts
+    const registry = await suiClient.getObject({
+      id: CONTRACT_CONFIG.REGISTRY_ID,
+      options: { showContent: true },
+    });
+
+    const fields = registry.data.content.fields as any;
+    const engagementMap = fields.engagement_map;
+    const contents = engagementMap.fields?.contents || engagementMap.contents;
+
+    // Find engagement entry for this article
+    const engagementEntry = contents.find((item: any) => {
+      const key = item.fields?.key || item.key;
+      return key === blobId;
+    });
+
+    const value = engagementEntry.fields?.value || engagementEntry.value;
+    const valueFields = value.fields || value;
+    const commentIds = valueFields.comment_ids as string[];
+    ```
+  </Step>
+
+  <Step title="Fetch Comment Objects">
+    Retrieve all comment objects in a single batch request:
+
+    ```typescript src/hooks/useComments.ts
+    const commentObjects = await suiClient.multiGetObjects({
+      ids: commentIds,
+      options: { showContent: true }
+    });
+    ```
+  </Step>
+
+  <Step title="Parse and Sort">
+    Parse comment data and sort by timestamp:
+
+    ```typescript src/hooks/useComments.ts
+    const parsedComments = commentObjects
+      .map((obj) => {
+        if (!obj.data?.content) return null;
+        
+        const fields = obj.data.content.fields as any;
+        return {
+          id: obj.data.objectId,
+          blobId: fields.blob_id,
+          author: fields.author,
+          text: fields.preview_text,
+          timestamp: Number(fields.timestamp),
+          tipsReceived: Number(fields.tips_received || 0)
+        };
+      })
+      .filter((c): c is Comment => c !== null)
+      .sort((a, b) => b.timestamp - a.timestamp); // Newest first
+    ```
+  </Step>
+</Steps>
+
+## Comment Data Structure
+
+```typescript src/hooks/useComments.ts
+export interface Comment {
+  id: string;              // On-chain object ID
+  blobId: string;          // Article blob ID
+  author: string;          // Commenter's address
+  text: string;            // Comment text (or preview)
+  timestamp: number;       // Unix timestamp
+  tipsReceived: number;    // Tips in MIST
+}
+```
+
+## Posting Short Comments
+
+For comments ≤280 characters, use the simple post function:
+
+```typescript src/lib/sui.ts
+export function createPostCommentTransaction(
+  blobId: string, 
+  commentText: string
+): Transaction {
+  const tx = new Transaction();
+
+  tx.moveCall({
+    target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::post_comment`,
+    arguments: [
+      tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+      tx.pure.string(blobId),
+      tx.pure.string(commentText),
+    ],
+  });
+
+  return tx;
+}
+```
+
+## Posting Long Comments
+
+For comments >280 characters, upload to Walrus first:
+
+```typescript src/lib/sui.ts
+export function createPostCommentWithBlobTransaction(
+  blobId: string,
+  previewText: string,
+  contentBlobId: string,
+  commentType: 'text_long' | 'media'
+): Transaction {
+  const tx = new Transaction();
+
+  tx.moveCall({
+    target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::post_comment_with_blob`,
+    arguments: [
+      tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+      tx.pure.string(blobId),
+      tx.pure.string(previewText),
+      tx.pure.string(contentBlobId),
+      tx.pure.string(commentType),
+    ],
+  });
+
+  return tx;
+}
+```
+
+<Tip>
+Store the first 280 characters as preview text on-chain for quick display, with full content in Walrus.
+</Tip>
+
+## usePostComment Hook
+
+The mutation hook handles comment submission:
+
+```typescript src/hooks/useComments.ts
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { Transaction } from '@mysten/sui/transactions';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+export function usePostComment() {
+  const account = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ blobId, text }: { blobId: string, text: string }) => {
+      if (!account) throw new Error("Wallet not connected");
+
+      const tx = new Transaction();
+
+      tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::news_registry::post_comment`,
+        arguments: [
+          tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+          tx.pure.string(blobId),
+          tx.pure.string(text)
+        ],
+      });
+
+      return new Promise((resolve, reject) => {
+        signAndExecute(
+          { transaction: tx },
+          {
+            onSuccess: (result) => {
+              console.log('Transaction success:', result);
+              // Wait for indexing
+              setTimeout(() => resolve(result), 2000);
+            },
+            onError: (error) => {
+              console.error('Transaction failed:', error);
+              reject(error);
+            },
+          }
+        );
+      });
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['comments', variables.blobId] });
+      queryClient.invalidateQueries({ queryKey: ['article', variables.blobId] });
+    }
+  });
+}
+```
+
+<Note>
+The 2-second delay after success allows the blockchain to index the new comment before refetching.
+</Note>
+
+## CommentSection Component
+
+A complete comment section with form and list:
+
+```tsx src/components/CommentSection.tsx
+import { useState } from 'react';
+import { useCurrentAccount, ConnectModal } from '@mysten/dapp-kit';
+import { useArticleComments, usePostComment } from '../hooks/useComments';
+
+export default function CommentSection({ articleId }: { articleId: string }) {
+  const { data: comments, isLoading } = useArticleComments(articleId);
+  const { mutate: postComment, isPending } = usePostComment();
+  const account = useCurrentAccount();
+  const [commentText, setCommentText] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+
+    postComment(
+      { blobId: articleId, text: commentText },
+      {
+        onSuccess: () => {
+          setCommentText('');
+        },
+        onError: (err) => {
+          console.error("Failed to post comment:", err);
+          alert("Failed to post comment.");
+        }
+      }
+    );
+  };
+
+  return (
+    <div className="comments-section">
+      <h3>
+        Comments <span>{comments?.length || 0}</span>
+      </h3>
+
+      {/* Comment Form */}
+      <div className="comment-form">
+        {!account ? (
+          <div>
+            <p>Login to join the conversation.</p>
+            <ConnectModal
+              trigger={<button>GET STARTED</button>}
+              open={open}
+              onOpenChange={setOpen}
+            />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="What are your thoughts on this story?"
+              maxLength={280}
+            />
+            <div>
+              <span>{commentText.length}/280</span>
+              <button type="submit" disabled={!commentText.trim() || isPending}>
+                {isPending ? 'POSTING...' : 'POST COMMENT'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Comments List */}
+      <div className="comments-list">
+        {isLoading ? (
+          <div>Loading...</div>
+        ) : comments && comments.length > 0 ? (
+          comments.map((comment) => (
+            <div key={comment.id} className="comment-item">
+              <div>
+                <span>{comment.author.slice(0, 6)}...{comment.author.slice(-4)}</span>
+                <span>{new Date(comment.timestamp).toLocaleDateString()}</span>
+              </div>
+              <p>{comment.text}</p>
+            </div>
+          ))
+        ) : (
+          <p>No comments yet. Be the first to share your thoughts!</p>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+## Character Limit Indicator
+
+Show remaining characters with visual feedback:
+
+```tsx
+<span 
+  style={{
+    color: commentText.length > 250 ? 'red' : 'gray'
+  }}
+>
+  {commentText.length}/280
+</span>
+```
+
+## Wallet Connection Check
+
+Only authenticated users can comment:
+
+```tsx
+{!account ? (
+  <div>
+    <p>Login to join the conversation.</p>
+    <ConnectModal trigger={<button>GET STARTED</button>} />
+  </div>
+) : (
+  <form onSubmit={handleSubmit}>
+    {/* Comment form */}
+  </form>
+)}
+```
+
+## Query Configuration
+
+Configure real-time updates:
+
+```typescript src/hooks/useComments.ts
+return useQuery({
+  queryKey: ['comments', blobId],
+  queryFn: async (): Promise<Comment[]> => {
+    // Fetch logic
+  },
+  enabled: !!blobId,
+  staleTime: 0,                    // Always fetch fresh data
+  refetchOnWindowFocus: true       // Refresh when tab gains focus
+});
+```
+
+<Tip>
+Setting `staleTime: 0` ensures users always see the latest comments when they navigate to an article.
+</Tip>
+
+## Uploading Long Comments to Walrus
+
+For comments exceeding 280 characters:
+
+<Steps>
+  <Step title="Prepare Comment Content">
+    ```typescript
+    const commentContent: WalrusCommentContent = {
+      text: longCommentText,
+      timestamp: Date.now(),
+      author: account.address
+    };
+    ```
+  </Step>
+
+  <Step title="Upload to Walrus">
+    ```typescript
+    import { uploadToWalrus } from '../lib/walrus';
+    
+    const blobId = await uploadToWalrus(commentContent);
+    ```
+  </Step>
+
+  <Step title="Create Preview Text">
+    ```typescript
+    const previewText = longCommentText.substring(0, 280);
+    ```
+  </Step>
+
+  <Step title="Post Comment with Blob">
+    ```typescript
+    const tx = createPostCommentWithBlobTransaction(
+      articleId,
+      previewText,
+      blobId,
+      'text_long'
+    );
+    ```
+  </Step>
+</Steps>
+
+## Comment Display Formatting
+
+Format author addresses for readability:
+
+```tsx
+<span>
+  {comment.author.slice(0, 6)}...{comment.author.slice(-4)}
+</span>
+```
+
+Format timestamps:
+
+```tsx
+<span>
+  {new Date(comment.timestamp).toLocaleDateString()}
+</span>
+```
+
+## Error Handling
+
+Handle various error scenarios:
+
+```typescript
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  if (!commentText.trim()) {
+    alert('Comment cannot be empty');
+    return;
+  }
+
+  if (commentText.length > 280) {
+    // Handle long comment flow
+    return;
+  }
+
+  postComment(
+    { blobId: articleId, text: commentText },
+    {
+      onSuccess: () => {
+        setCommentText('');
+      },
+      onError: (err) => {
+        console.error('Failed to post comment:', err);
+        alert('Failed to post comment. Please try again.');
+      }
+    }
+  );
+};
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Validate Input" icon="check">
+    Always validate comment text before submission
+  </Card>
+  
+  <Card title="Handle Loading States" icon="spinner">
+    Show loading indicators during submission
+  </Card>
+  
+  <Card title="Optimistic Updates" icon="bolt">
+    Consider showing comments immediately before confirmation
+  </Card>
+  
+  <Card title="Cache Invalidation" icon="refresh">
+    Invalidate queries after successful posts
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Article Tipping" icon="coins" href="/features/article-tipping">
+    Add tipping functionality to comments
+  </Card>
+  <Card title="Wallet Connection" icon="wallet" href="/features/wallet-connection">
+    Learn about wallet integration
+  </Card>
+</CardGroup>

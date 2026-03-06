@@ -1,0 +1,465 @@
+---
+title: 'Transactions'
+description: 'Build, sign, and execute on-chain transactions with TUNA'
+---
+
+# Transactions
+
+This guide covers how to build and execute write operations on TUNA, including tipping articles, posting comments, and managing engagement.
+
+<Warning>
+  All write operations require a connected wallet and SUI tokens for gas fees.
+</Warning>
+
+## Prerequisites
+
+Before executing transactions, ensure you have:
+
+- A connected Sui wallet (Sui Wallet, Suiet, Ethos, etc.)
+- SUI tokens for gas fees (on testnet, use the [faucet](https://discord.com/channels/916379725201563759/971488439931392130))
+- The TUNA contract configuration
+
+## Transaction Builders
+
+Here are the core transaction builders from the TUNA codebase:
+
+### Tip an Article
+
+Reward quality content by tipping SUI to articles:
+
+```typescript lib/sui.ts
+import { Transaction } from '@mysten/sui/transactions';
+import { CONTRACT_CONFIG } from '../config';
+
+/**
+ * Create a transaction to tip an article
+ * @param blobId - The article blob ID
+ * @param amount - The tip amount in MIST (1 SUI = 1,000,000,000 MIST)
+ * @returns Transaction
+ */
+export function createTipArticleTransaction(
+  blobId: string, 
+  amount: number
+): Transaction {
+    const tx = new Transaction();
+
+    // Split coins for the tip
+    const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+
+    tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::tip_article`,
+        arguments: [
+            tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+            tx.pure.string(blobId),
+            tipCoin,
+        ],
+    });
+
+    return tx;
+}
+```
+
+Usage:
+
+```typescript
+import { createTipArticleTransaction, suiToMist } from './lib/sui';
+
+// Tip 0.1 SUI to an article
+const amount = suiToMist(0.1); // 100_000_000 MIST
+const tx = createTipArticleTransaction(article.blob_id, amount);
+
+// Sign and execute with wallet
+await wallet.signAndExecuteTransaction({ transaction: tx });
+```
+
+### Post a Comment
+
+Post a short comment (≤280 characters) to an article:
+
+```typescript lib/sui.ts
+/**
+ * Create a transaction to post a short comment
+ * @param blobId - The article blob ID
+ * @param commentText - The comment text (≤280 chars)
+ * @returns Transaction
+ */
+export function createPostCommentTransaction(
+  blobId: string, 
+  commentText: string
+): Transaction {
+    const tx = new Transaction();
+
+    tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::post_comment`,
+        arguments: [
+            tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+            tx.pure.string(blobId),
+            tx.pure.string(commentText),
+        ],
+    });
+
+    return tx;
+}
+```
+
+Usage:
+
+```typescript
+const comment = "Great article! Thanks for sharing.";
+const tx = createPostCommentTransaction(article.blob_id, comment);
+
+await wallet.signAndExecuteTransaction({ transaction: tx });
+```
+
+### Post a Long Comment or Media
+
+For comments longer than 280 characters or comments with media, the content is stored on Walrus:
+
+```typescript lib/sui.ts
+/**
+ * Create a transaction to post a long comment or comment with media
+ * @param blobId - The article blob ID
+ * @param previewText - The preview text (≤280 chars)
+ * @param contentBlobId - The Walrus blob ID containing full content
+ * @param commentType - 'text_long' or 'media'
+ * @returns Transaction
+ */
+export function createPostCommentWithBlobTransaction(
+    blobId: string,
+    previewText: string,
+    contentBlobId: string,
+    commentType: 'text_long' | 'media'
+): Transaction {
+    const tx = new Transaction();
+
+    tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::post_comment_with_blob`,
+        arguments: [
+            tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+            tx.pure.string(blobId),
+            tx.pure.string(previewText),
+            tx.pure.string(contentBlobId),
+            tx.pure.string(commentType),
+        ],
+    });
+
+    return tx;
+}
+```
+
+Usage:
+
+```typescript
+import { uploadToWalrus } from './lib/walrus';
+
+// Upload long comment content to Walrus
+const longComment = "...very long text...";
+const contentBlobId = await uploadToWalrus({
+    text: longComment,
+    timestamp: Date.now(),
+});
+
+// Create transaction with preview
+const preview = longComment.substring(0, 280);
+const tx = createPostCommentWithBlobTransaction(
+    article.blob_id,
+    preview,
+    contentBlobId,
+    'text_long'
+);
+
+await wallet.signAndExecuteTransaction({ transaction: tx });
+```
+
+### Tip a Comment
+
+Reward insightful comments with SUI:
+
+```typescript lib/sui.ts
+/**
+ * Create a transaction to tip a comment
+ * @param commentId - The comment object ID
+ * @param amount - The tip amount in MIST
+ * @returns Transaction
+ */
+export function createTipCommentTransaction(
+  commentId: string, 
+  amount: number
+): Transaction {
+    const tx = new Transaction();
+
+    // Split coins for the tip
+    const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+
+    tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::tip_comment`,
+        arguments: [
+            tx.object(commentId),
+            tipCoin,
+        ],
+    });
+
+    return tx;
+}
+```
+
+### Withdraw Comment Tips
+
+Comment authors can withdraw accumulated tips:
+
+```typescript lib/sui.ts
+/**
+ * Create a transaction to withdraw tips from a comment
+ * @param commentId - The comment object ID
+ * @returns Transaction
+ */
+export function createWithdrawCommentTipsTransaction(
+  commentId: string
+): Transaction {
+    const tx = new Transaction();
+
+    tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::withdraw_comment_tips`,
+        arguments: [
+            tx.object(commentId),
+        ],
+    });
+
+    return tx;
+}
+```
+
+## Utility Functions
+
+### Currency Conversion
+
+Sui uses MIST as the smallest unit (1 SUI = 1,000,000,000 MIST):
+
+```typescript lib/sui.ts
+/**
+ * Convert SUI to MIST
+ * @param sui - Amount in SUI
+ * @returns Amount in MIST
+ */
+export function suiToMist(sui: number): number {
+    return Math.floor(sui * 1_000_000_000);
+}
+
+/**
+ * Convert MIST to SUI
+ * @param mist - Amount in MIST
+ * @returns Amount in SUI
+ */
+export function mistToSui(mist: number): number {
+    return mist / 1_000_000_000;
+}
+
+/**
+ * Format SUI amount for display
+ * @param mist - Amount in MIST
+ * @returns Formatted string
+ */
+export function formatSui(mist: number): string {
+    const sui = mistToSui(mist);
+    if (sui < 0.001) return '< 0.001 SUI';
+    if (sui < 1) return `${sui.toFixed(3)} SUI`;
+    return `${sui.toFixed(2)} SUI`;
+}
+```
+
+Usage:
+
+```typescript
+const tipInSui = 0.05;
+const tipInMist = suiToMist(tipInSui); // 50_000_000
+
+const displayAmount = formatSui(50_000_000); // "0.050 SUI"
+```
+
+### Validate Tip Amount
+
+Ensure tips meet the minimum requirement:
+
+```typescript lib/sui.ts
+import { CONSTANTS } from '../config';
+
+/**
+ * Validate tip amount
+ * @param amount - Amount in MIST
+ * @returns true if valid
+ */
+export function isValidTipAmount(amount: number): boolean {
+    return amount >= CONSTANTS.MIN_TIP_AMOUNT;
+}
+```
+
+Usage:
+
+```typescript
+const amount = suiToMist(0.001); // 1_000_000 MIST
+
+if (!isValidTipAmount(amount)) {
+    alert('Minimum tip amount is 0.001 SUI');
+    return;
+}
+```
+
+## Complete Integration Example
+
+Here's a full example combining all transaction types:
+
+```typescript
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import {
+    createTipArticleTransaction,
+    createPostCommentTransaction,
+    suiToMist,
+    isValidTipAmount,
+} from './lib/sui';
+
+function ArticleInteraction({ article }) {
+    const account = useCurrentAccount();
+    const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+    const handleTip = async () => {
+        const amount = suiToMist(0.1); // 0.1 SUI
+
+        if (!isValidTipAmount(amount)) {
+            alert('Invalid tip amount');
+            return;
+        }
+
+        const tx = createTipArticleTransaction(article.blob_id, amount);
+
+        signAndExecute(
+            { transaction: tx },
+            {
+                onSuccess: (result) => {
+                    console.log('Tip sent!', result);
+                },
+                onError: (error) => {
+                    console.error('Tip failed:', error);
+                },
+            }
+        );
+    };
+
+    const handleComment = async (text: string) => {
+        if (text.length > 280) {
+            alert('Comment too long');
+            return;
+        }
+
+        const tx = createPostCommentTransaction(article.blob_id, text);
+
+        signAndExecute(
+            { transaction: tx },
+            {
+                onSuccess: (result) => {
+                    console.log('Comment posted!', result);
+                },
+                onError: (error) => {
+                    console.error('Comment failed:', error);
+                },
+            }
+        );
+    };
+
+    if (!account) {
+        return <div>Please connect your wallet</div>;
+    }
+
+    return (
+        <div>
+            <button onClick={handleTip}>Tip 0.1 SUI</button>
+            <button onClick={() => handleComment('Great article!')}>Post Comment</button>
+        </div>
+    );
+}
+```
+
+## Transaction Status and Events
+
+After executing a transaction, you can track its status and listen for events:
+
+```typescript
+import { suiClient } from './client';
+
+async function waitForTransaction(digest: string) {
+    // Wait for transaction to be confirmed
+    const result = await suiClient.waitForTransaction({
+        digest,
+        options: {
+            showEffects: true,
+            showEvents: true,
+        },
+    });
+
+    console.log('Transaction status:', result.effects?.status);
+    console.log('Events:', result.events);
+
+    return result;
+}
+```
+
+## Error Handling
+
+<Note>
+  Always implement comprehensive error handling for transaction failures.
+</Note>
+
+Common errors:
+
+- **Insufficient gas**: User doesn't have enough SUI for gas fees
+- **User rejection**: User declined to sign the transaction
+- **Invalid arguments**: Blob ID doesn't exist or invalid amount
+- **Network errors**: RPC timeout or connection issues
+
+```typescript
+try {
+    await wallet.signAndExecuteTransaction({ transaction: tx });
+} catch (error: any) {
+    if (error.message?.includes('rejected')) {
+        console.log('User cancelled transaction');
+    } else if (error.message?.includes('insufficient')) {
+        alert('Insufficient SUI balance');
+    } else {
+        console.error('Transaction failed:', error);
+    }
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Validate Input">
+    Always validate user input before building transactions. Check comment length, tip amounts, and blob ID format.
+  </Step>
+  
+  <Step title="Show Confirmation">
+    Display a confirmation dialog showing the transaction details before requesting a signature.
+  </Step>
+  
+  <Step title="Handle Gas Estimates">
+    Use `tx.build()` to get gas estimates and show them to users before signing.
+  </Step>
+  
+  <Step title="Provide Feedback">
+    Show loading states during transaction execution and clear success/error messages afterward.
+  </Step>
+  
+  <Step title="Implement Retry Logic">
+    For failed transactions, allow users to retry or adjust parameters (e.g., gas budget).
+  </Step>
+</Steps>
+
+## Next Steps
+
+You now have all the tools to build a full-featured TUNA integration:
+
+- ✅ Fetch news articles from the registry
+- ✅ Display content from Walrus
+- ✅ Execute tips and comments
+- ✅ Handle errors and edge cases
+
+For questions or support, join the [Sui Discord](https://discord.gg/sui) or check the [TUNA GitHub](https://github.com/yourusername/tuna).

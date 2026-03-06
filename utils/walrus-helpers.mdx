@@ -1,0 +1,300 @@
+---
+title: 'Walrus Helpers'
+description: 'Utility functions for Walrus decentralized storage operations with automatic fallback'
+---
+
+## Overview
+
+The Walrus helper utilities provide robust functions for uploading and fetching content from Walrus storage. These utilities implement automatic fallback across multiple publisher and aggregator endpoints for reliability.
+
+## Configuration
+
+### Publisher Endpoints
+
+TUNA uses multiple Walrus publisher endpoints with automatic fallback:
+
+```typescript
+const WALRUS_PUBLISHERS = [
+  'https://walrus-testnet-publisher.nodes.guru/v1/blobs',
+  'https://walrus-testnet-publisher.stakely.io/v1/blobs',
+  'https://publisher.walrus-testnet.walrus.space/v1/blobs',
+  'https://walrus-testnet-publisher.everstake.one/v1/blobs',
+  'https://walrus-testnet-publisher.chainbase.online/v1/blobs',
+  'https://publisher.testnet.walrus.atalma.io/v1/blobs',
+];
+```
+
+### Aggregator Endpoints
+
+```typescript
+const WALRUS_AGGREGATORS = [
+  'https://walrus-testnet-aggregator.nodes.guru/v1/blobs',
+  'https://walrus-testnet-aggregator.stakely.io/v1/blobs',
+  'https://aggregator.walrus-testnet.walrus.space/v1/blobs',
+  'https://walrus-testnet-aggregator.everstake.one/v1/blobs',
+  'https://walrus-testnet-aggregator.chainbase.online/v1/blobs',
+  'https://aggregator.testnet.walrus.atalma.io/v1/blobs',
+];
+```
+
+<Note>
+  If one endpoint fails, the function automatically tries the next one in the list.
+</Note>
+
+## Upload Functions
+
+### uploadToWalrus
+
+Upload JSON content to Walrus with automatic fallback across publishers.
+
+```typescript
+async function uploadToWalrus(
+  content: WalrusArticleContent | WalrusCommentContent
+): Promise<string>
+```
+
+<ParamField path="content" type="WalrusArticleContent | WalrusCommentContent" required>
+  Content object to upload (will be JSON stringified)
+</ParamField>
+
+**Returns:** `Promise<string>` - The Walrus blob ID
+
+**Implementation Details:**
+- Content is JSON stringified before upload
+- Tries each publisher endpoint sequentially until success
+- Adds `?epochs=30` parameter for blob retention
+- Handles multiple response formats from Walrus API
+- Throws error if all publishers fail
+
+**Response Format Handling:**
+```typescript
+const blobId = 
+  data.newlyCreated?.blobObject?.blobId ||      // New blob
+  data.alreadyCertified?.blobId ||               // Already exists
+  data.blobObject?.blobId;                       // Alternative format
+```
+
+**Example:**
+```typescript
+import { uploadToWalrus } from '@/lib/walrus';
+import type { WalrusArticleContent } from '@/types';
+
+const content: WalrusArticleContent = {
+  title: 'My Article',
+  subtitle: 'An interesting story',
+  content: 'Article content...',
+  coverImage: 'blob_id_for_image',
+};
+
+try {
+  const blobId = await uploadToWalrus(content);
+  console.log('Uploaded to Walrus:', blobId);
+} catch (error) {
+  console.error('Upload failed:', error);
+}
+```
+
+### uploadImageToWalrus
+
+Upload image files to Walrus storage.
+
+```typescript
+async function uploadImageToWalrus(file: File): Promise<string>
+```
+
+<ParamField path="file" type="File" required>
+  Image file object from file input or drag-and-drop
+</ParamField>
+
+**Returns:** `Promise<string>` - The Walrus blob ID for the image
+
+**Implementation Details:**
+- Converts file to ArrayBuffer for binary upload
+- Preserves original file MIME type
+- Uses same fallback logic as `uploadToWalrus`
+- Stores for 30 epochs
+
+**Example:**
+```typescript
+import { uploadImageToWalrus } from '@/lib/walrus';
+
+const handleImageUpload = async (file: File) => {
+  try {
+    const blobId = await uploadImageToWalrus(file);
+    console.log('Image uploaded:', blobId);
+    return blobId;
+  } catch (error) {
+    console.error('Image upload failed:', error);
+    throw error;
+  }
+};
+
+// Usage with file input
+<input 
+  type="file" 
+  accept="image/*"
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageUpload(file);
+  }}
+/>
+```
+
+## Fetch Functions
+
+### fetchFromWalrus
+
+Fetch content from Walrus with automatic fallback across aggregators.
+
+```typescript
+async function fetchFromWalrus<T = any>(blobId: string): Promise<T>
+```
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID to fetch
+</ParamField>
+
+<ParamField path="T" type="generic" default="any">
+  Type parameter for the expected return type
+</ParamField>
+
+**Returns:** `Promise<T>` - The parsed JSON content
+
+**Implementation Details:**
+- Validates blob ID format before attempting fetch
+- Tries each aggregator endpoint sequentially
+- Automatically parses JSON response
+- Throws error if all aggregators fail
+
+**Blob ID Validation:**
+```typescript
+// Invalid blob IDs are rejected early:
+- Empty or null blob IDs
+- Length < 30 characters
+- Contains spaces
+- Placeholder values like "blob_id"
+```
+
+**Example:**
+```typescript
+import { fetchFromWalrus } from '@/lib/walrus';
+import type { WalrusArticleContent } from '@/types';
+
+const loadArticle = async (blobId: string) => {
+  try {
+    const content = await fetchFromWalrus<WalrusArticleContent>(blobId);
+    console.log('Article:', content.title);
+    return content;
+  } catch (error) {
+    console.error('Failed to fetch article:', error);
+    throw error;
+  }
+};
+```
+
+### getWalrusUrl
+
+Get the public URL for a Walrus blob.
+
+```typescript
+function getWalrusUrl(blobId: string): string
+```
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID
+</ParamField>
+
+**Returns:** `string` - Public URL to access the blob
+
+**Implementation:**
+```typescript
+// Uses the third aggregator (walrus.space) as default
+return `${WALRUS_AGGREGATORS[2]}/${blobId}`;
+```
+
+**Example:**
+```typescript
+import { getWalrusUrl } from '@/lib/walrus';
+
+const url = getWalrusUrl('abc123...');
+// Returns: "https://aggregator.walrus-testnet.walrus.space/v1/blobs/abc123..."
+
+// Use in img tags
+<img src={getWalrusUrl(article.coverImage)} alt="Cover" />
+```
+
+## Error Handling
+
+All Walrus functions implement robust error handling:
+
+<CodeGroup>
+
+```typescript Upload Error Handling
+try {
+  const blobId = await uploadToWalrus(content);
+  // Success
+} catch (error) {
+  // Error message includes number of failed attempts
+  // "Walrus upload failed on all 6 publishers"
+  console.error(error);
+}
+```
+
+```typescript Fetch Error Handling
+try {
+  const content = await fetchFromWalrus(blobId);
+  // Success
+} catch (error) {
+  // Could be validation error or fetch failure
+  // "Invalid blob ID: ..." or
+  // "Walrus fetch failed: Could not retrieve blob ..."
+  console.error(error);
+}
+```
+
+</CodeGroup>
+
+## Type Definitions
+
+### WalrusArticleContent
+
+```typescript
+type WalrusArticleContent = {
+  title: string;
+  subtitle?: string;
+  content: string;
+  coverImage?: string;
+  tags?: string[];
+};
+```
+
+### WalrusCommentContent
+
+```typescript
+type WalrusCommentContent = {
+  text?: string;
+  mediaType?: string;
+  mediaBlobId?: string;
+};
+```
+
+## Best Practices
+
+<Note>
+  **Storage Duration:** All uploads use `epochs=30` parameter, which stores data for 30 epochs on Walrus testnet. Plan for re-upload or archival strategies for long-term storage.
+</Note>
+
+<Note>
+  **Blob ID Validation:** Always validate blob IDs before attempting to fetch. Invalid IDs will fail early without consuming API requests.
+</Note>
+
+<Note>
+  **Error Recovery:** The automatic fallback mechanism makes uploads and fetches resilient. However, you should still implement user-facing error messages for when all endpoints fail.
+</Note>
+
+## Source Reference
+
+All Walrus helper functions are implemented in:
+```
+src/lib/walrus.ts
+```

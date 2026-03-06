@@ -1,0 +1,93 @@
+---
+title: Introduction
+description: A decentralized news aggregator for the Sui ecosystem with article tipping and commenting features
+---
+
+<div className="bg-gradient-to-r from-[#14354d] to-[#1ea79a] rounded-none p-12 mb-8">
+  <h1 className="text-4xl font-bold text-white mb-4">Welcome to TUNA</h1>
+  <p className="text-xl text-white/90">
+    A decentralized news aggregator built on the Sui blockchain, combining news curation with blockchain-powered tipping and commenting.
+  </p>
+</div>
+
+## What is TUNA?
+
+TUNA is a decentralized news aggregator designed specifically for the Sui ecosystem. It brings together news from various sources and stores them on the Sui blockchain and Walrus decentralized storage network, enabling users to engage with content through tipping and commenting.
+
+### Key Features
+
+<CardGroup cols={2}>
+  <Card title="Decentralized News Feed" icon="newspaper" href="/features/news-feed">
+    Aggregate and display news from the Sui ecosystem with on-chain indexing
+  </Card>
+  <Card title="Article Tipping" icon="coins" href="/features/article-tipping">
+    Tip articles with SUI tokens to support quality content
+  </Card>
+  <Card title="On-Chain Comments" icon="comments" href="/features/comments">
+    Post comments with hybrid storage: short comments on-chain, long ones on Walrus
+  </Card>
+  <Card title="Wallet Integration" icon="wallet" href="/features/wallet-connection">
+    Seamless integration with Sui Wallet through @mysten/dapp-kit
+  </Card>
+</CardGroup>
+
+## How It Works
+
+TUNA uses a hybrid architecture combining the Sui blockchain for indexing and transactions with Walrus for content storage:
+
+1. **News Registry** - A smart contract on Sui maintains an index of all news articles via blob IDs
+2. **Walrus Storage** - Full article content is stored on the Walrus decentralized storage network
+3. **Engagement System** - Tips and comments are tracked on-chain with engagement metrics
+4. **React Frontend** - A modern React application provides the user interface
+
+<Note>
+TUNA is currently deployed on the Sui testnet. Make sure you have testnet SUI tokens to interact with the application.
+</Note>
+
+## Why TUNA?
+
+Traditional news aggregators are centralized and controlled by a single entity. TUNA brings several advantages:
+
+- **Decentralization** - No single point of control or censorship
+- **Incentive Alignment** - Tip quality content to incentivize good journalism
+- **Permanent Storage** - Articles stored on Walrus are immutable and permanent
+- **Transparent Engagement** - All tips and interactions are recorded on-chain
+- **Open Integration** - Anyone can build on top of the TUNA protocol
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running with TUNA in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install and configure TUNA locally
+  </Card>
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Integrate TUNA into your own application
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/types">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Tech Stack
+
+TUNA is built with modern web3 technologies:
+
+- **Frontend**: React 19, TypeScript, Vite
+- **Blockchain**: Sui Network (Testnet)
+- **Storage**: Walrus Decentralized Storage
+- **State Management**: TanStack Query (React Query)
+- **Wallet**: @mysten/dapp-kit
+- **Blockchain SDK**: @mysten/sui.js
+
+## Community & Support
+
+- **GitHub**: [Miracle656/TUNA](https://github.com/Miracle656/TUNA)
+- **Sui Documentation**: [docs.sui.io](https://docs.sui.io)
+- **Walrus Documentation**: [docs.walrus.site](https://docs.walrus.site)
+
+<Tip>
+New to Sui? Check out the [Sui Integration](/concepts/sui-integration) guide to understand how TUNA leverages the Sui blockchain.
+</Tip>

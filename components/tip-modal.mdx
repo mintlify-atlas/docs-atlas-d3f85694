@@ -1,0 +1,382 @@
+---
+title: 'TipModal Component'
+description: 'Modal interface for tipping articles with SUI tokens'
+---
+
+## Overview
+
+The `TipModal` component provides a user-friendly interface for sending SUI token tips to article authors. It features quick amount selection, custom amount input, and blockchain transaction handling.
+
+## Component Interface
+
+```tsx
+interface TipModalProps {
+  isOpen: boolean
+  articleId: string
+  articleTitle: string
+  onClose: () => void
+}
+```
+
+## Props
+
+<ParamField path="isOpen" type="boolean" required>
+  Controls the modal's visibility state. When `true`, the modal is displayed and body scroll is prevented.
+</ParamField>
+
+<ParamField path="articleId" type="string" required>
+  The unique identifier of the article being tipped. Used to create the blockchain transaction.
+</ParamField>
+
+<ParamField path="articleTitle" type="string" required>
+  The article's title, displayed in the modal header for context.
+</ParamField>
+
+<ParamField path="onClose" type="() => void" required>
+  Callback function invoked when the modal should close. Called on overlay click, close button, or successful tip.
+</ParamField>
+
+## Usage
+
+### Basic Implementation
+
+```tsx
+import { useState } from 'react'
+import TipModal from './components/TipModal'
+
+function ArticleCard({ article }) {
+  const [isTipModalOpen, setIsTipModalOpen] = useState(false)
+
+  return (
+    <>
+      <button onClick={() => setIsTipModalOpen(true)}>
+        💰 TIP
+      </button>
+
+      {isTipModalOpen && (
+        <TipModal
+          isOpen={isTipModalOpen}
+          articleId={article.id}
+          articleTitle={article.title}
+          onClose={() => setIsTipModalOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+```
+
+### Conditional Rendering
+
+```tsx
+{isTipModalOpen && (
+  <TipModal
+    isOpen={isTipModalOpen}
+    articleId={article.id}
+    articleTitle={article.title}
+    onClose={() => setIsTipModalOpen(false)}
+  />
+)}
+```
+
+<Note>
+  The modal should only be rendered when `isTipModalOpen` is true to prevent unnecessary DOM elements.
+</Note>
+
+## Features
+
+### Quick Amount Selection
+
+Predefined amounts for fast tipping:
+
+```tsx
+const quickAmounts = [0.01, 0.05, 0.1, 0.5, 1]
+```
+
+Users can click any quick amount button to select it. Active selection is highlighted with the `active` class.
+
+### Custom Amount Input
+
+Numeric input for custom tip amounts:
+
+```tsx
+<input
+  type="number"
+  min="0.001"
+  step="0.001"
+  value={customAmount}
+  onChange={(e) => setCustomAmount(e.target.value)}
+  placeholder="0.000"
+/>
+```
+
+**Input Constraints:**
+- Minimum: 0.001 SUI
+- Step: 0.001 SUI
+- Type: Decimal number
+
+### Amount Validation
+
+Validates tip amounts before transaction:
+
+```tsx
+const tipAmount = customAmount ? parseFloat(customAmount) : amount
+const amountInMist = suiToMist(tipAmount)
+
+if (!isValidTipAmount(amountInMist)) {
+  setToast({ message: 'Minimum tip amount is 0.001 SUI', type: 'error' })
+  return
+}
+```
+
+## Transaction Flow
+
+### Step 1: Amount Selection
+
+1. User selects quick amount OR enters custom amount
+2. UI updates to show selected amount
+3. Summary displays total amount and estimated gas
+
+### Step 2: Transaction Creation
+
+```tsx
+const tx = createTipArticleTransaction(articleId, amountInMist)
+```
+
+Creates a blockchain transaction with:
+- Target article ID
+- Tip amount in MIST (1 SUI = 1,000,000,000 MIST)
+
+### Step 3: Signing & Execution
+
+```tsx
+signAndExecute(
+  { transaction: tx },
+  {
+    onSuccess: () => {
+      setToast({ message: `Successfully tipped ${tipAmount} SUI!`, type: 'success' })
+      setTimeout(() => onClose(), 2000)
+    },
+    onError: (error) => {
+      console.error('Tip failed:', error)
+      setToast({ message: 'Failed to send tip. Please try again.', type: 'error' })
+      setIsSubmitting(false)
+    }
+  }
+)
+```
+
+### Step 4: Feedback
+
+- **Success**: Green toast notification, modal closes after 2s
+- **Error**: Red toast notification, modal stays open
+
+## State Management
+
+### Internal State
+
+```tsx
+const [amount, setAmount] = useState(0.01)
+const [customAmount, setCustomAmount] = useState('')
+const [isSubmitting, setIsSubmitting] = useState(false)
+const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+```
+
+### State Reset
+
+State is reset when modal opens:
+
+```tsx
+useEffect(() => {
+  if (isOpen) {
+    setAmount(0.01)
+    setCustomAmount('')
+    setIsSubmitting(false)
+  }
+}, [isOpen])
+```
+
+## UI Elements
+
+### Modal Structure
+
+```
+┌─────────────────────────────────────┐
+│ 💰 Tip this Article            [×] │
+├─────────────────────────────────────┤
+│ Article Title                       │
+│                                     │
+│ Quick amounts:                      │
+│ [0.01] [0.05] [0.1] [0.5] [1.0]    │
+│                                     │
+│ Or enter custom amount:             │
+│ [________] SUI                      │
+│ Minimum: 0.001 SUI                  │
+│                                     │
+│ Tip Amount:              0.01 SUI   │
+│ Gas Fee:                ~0.001 SUI  │
+├─────────────────────────────────────┤
+│              [Cancel] [Send Tip]    │
+└─────────────────────────────────────┘
+```
+
+### Overlay Interaction
+
+Clicking the overlay closes the modal:
+
+```tsx
+<div className="modal-overlay" onClick={onClose}>
+  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    {/* Modal content */}
+  </div>
+</div>
+```
+
+## Body Scroll Lock
+
+Prevents background scrolling when modal is open:
+
+```tsx
+useEffect(() => {
+  if (isOpen) {
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = 'unset'
+  }
+  return () => {
+    document.body.style.overflow = 'unset'
+  }
+}, [isOpen])
+```
+
+## Toast Notifications
+
+Integrated `Toast` component for user feedback:
+
+```tsx
+{toast && (
+  <Toast
+    message={toast.message}
+    type={toast.type}
+    onClose={() => setToast(null)}
+  />
+)}
+```
+
+## Dependencies
+
+```tsx
+import { useState, useEffect } from 'react'
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit'
+import { createTipArticleTransaction, suiToMist, isValidTipAmount } from '../lib/sui'
+import Toast from './Toast'
+import './TipModal.css'
+```
+
+### Required Utilities
+
+<ParamField path="createTipArticleTransaction" type="function">
+  Creates a blockchain transaction for tipping an article.
+  
+  ```tsx
+  function createTipArticleTransaction(
+    articleId: string,
+    amountInMist: number
+  ): Transaction
+  ```
+</ParamField>
+
+<ParamField path="suiToMist" type="function">
+  Converts SUI tokens to MIST (smallest unit).
+  
+  ```tsx
+  function suiToMist(sui: number): number
+  // 1 SUI = 1,000,000,000 MIST
+  ```
+</ParamField>
+
+<ParamField path="isValidTipAmount" type="function">
+  Validates if the tip amount meets minimum requirements.
+  
+  ```tsx
+  function isValidTipAmount(amountInMist: number): boolean
+  // Minimum: 0.001 SUI (1,000,000 MIST)
+  ```
+</ParamField>
+
+## Error Handling
+
+### Validation Errors
+
+```tsx
+if (!isValidTipAmount(amountInMist)) {
+  setToast({ message: 'Minimum tip amount is 0.001 SUI', type: 'error' })
+  return
+}
+```
+
+### Transaction Errors
+
+```tsx
+onError: (error) => {
+  console.error('Tip failed:', error)
+  setToast({ message: 'Failed to send tip. Please try again.', type: 'error' })
+  setIsSubmitting(false)
+}
+```
+
+### Creation Errors
+
+```tsx
+try {
+  const tx = createTipArticleTransaction(articleId, amountInMist)
+  // ...
+} catch (error) {
+  console.error('Error creating tip transaction:', error)
+  setToast({ message: 'Failed to create transaction', type: 'error' })
+  setIsSubmitting(false)
+}
+```
+
+## Styling
+
+### Modal Classes
+
+- `.modal-overlay`: Full-screen overlay with backdrop
+- `.modal-content`: Centered card with brutalist styling
+- `.modal-header`: Title and close button
+- `.modal-body`: Form content
+- `.modal-footer`: Action buttons
+
+### Button States
+
+```tsx
+<button
+  disabled={isSubmitting}
+  className="btn btn-primary"
+>
+  {isSubmitting ? 'Processing...' : 'Send Tip'}
+</button>
+```
+
+## Best Practices
+
+<Note>
+  Always validate amounts before creating transactions to prevent blockchain errors.
+</Note>
+
+```tsx
+// Good: Validate before transaction
+if (!isValidTipAmount(amountInMist)) {
+  showError()
+  return
+}
+const tx = createTipArticleTransaction(articleId, amountInMist)
+
+// Bad: Create transaction without validation
+const tx = createTipArticleTransaction(articleId, amountInMist)
+```
+
+<Warning>
+  Reset modal state when opening to prevent stale data from previous interactions.
+</Warning>

@@ -1,0 +1,241 @@
+---
+title: 'Tip Comment'
+description: 'Send tips to comment authors'
+---
+
+## Overview
+
+The `tip_comment` function allows users to send SUI tokens as a tip to the author of a comment. Tips are accumulated in the Comment object and can be withdrawn by the comment author at any time.
+
+## Function Signature
+
+```typescript
+function createTipCommentTransaction(commentId: string, amount: number): Transaction
+```
+
+## Parameters
+
+<ParamField path="commentId" type="string" required>
+  The Sui object ID of the comment you want to tip. Each comment is represented as a unique object on-chain.
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  The tip amount in MIST (1 SUI = 1,000,000,000 MIST). Must be at least `1_000_000` MIST (0.001 SUI).
+</ParamField>
+
+## Move Call Structure
+
+The transaction builder creates a Move call with the following structure:
+
+```typescript
+tx.moveCall({
+    target: `${PACKAGE_ID}::news_registry::tip_comment`,
+    arguments: [
+        tx.object(commentId),  // The comment object to tip
+        tipCoin,               // Split coin for the tip
+    ],
+});
+```
+
+<Note>
+  Unlike article tips which go directly to the author, comment tips are accumulated in the Comment object's balance. The comment author must call `withdraw_comment_tips` to claim them.
+</Note>
+
+## Gas Coin Splitting
+
+The transaction builder handles coin splitting automatically:
+
+1. Takes the gas coin from the transaction (`tx.gas`)
+2. Splits the specified `amount` from it
+3. Uses the split coin as the tip payment
+4. Remaining gas coin is used for transaction fees
+
+```typescript
+const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+```
+
+## Comment Object Handling
+
+When you tip a comment:
+- The tip is added to the comment's internal balance
+- The comment object remains owned by the original author
+- Tips accumulate until the author withdraws them
+- Multiple users can tip the same comment
+
+## Usage Example
+
+```typescript
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createTipCommentTransaction, suiToMist } from './lib/sui';
+
+function TipCommentButton({ commentId }: { commentId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleTip = (amountInSui: number) => {
+    // Convert SUI to MIST
+    const amountInMist = suiToMist(amountInSui);
+    
+    // Create the transaction
+    const tx = createTipCommentTransaction(commentId, amountInMist);
+    
+    // Sign and execute
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Comment tipped!', result.digest);
+        },
+        onError: (error) => {
+          console.error('Failed to tip comment:', error);
+        },
+      }
+    );
+  };
+  
+  return (
+    <div>
+      <button onClick={() => handleTip(0.01)}>
+        Tip 0.01 SUI
+      </button>
+      <button onClick={() => handleTip(0.1)}>
+        Tip 0.1 SUI
+      </button>
+      <button onClick={() => handleTip(1)}>
+        Tip 1 SUI
+      </button>
+    </div>
+  );
+}
+```
+
+## Advanced Example: Custom Tip Amount
+
+```typescript
+import { useState } from 'react';
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createTipCommentTransaction, suiToMist, isValidTipAmount } from './lib/sui';
+
+function CustomTipModal({ commentId, onClose }: Props) {
+  const [amount, setAmount] = useState('0.01');
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleSubmit = () => {
+    const amountInSui = parseFloat(amount);
+    const amountInMist = suiToMist(amountInSui);
+    
+    // Validate minimum amount
+    if (!isValidTipAmount(amountInMist)) {
+      alert('Minimum tip is 0.001 SUI');
+      return;
+    }
+    
+    const tx = createTipCommentTransaction(commentId, amountInMist);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: () => {
+          onClose();
+        },
+      }
+    );
+  };
+  
+  return (
+    <div className="modal">
+      <h3>Tip this comment</h3>
+      <input
+        type="number"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        min="0.001"
+        step="0.001"
+      />
+      <span>SUI</span>
+      <button onClick={handleSubmit}>Send Tip</button>
+      <button onClick={onClose}>Cancel</button>
+    </div>
+  );
+}
+```
+
+## Helper Functions
+
+### Converting SUI to MIST
+
+```typescript
+import { suiToMist } from './lib/sui';
+
+const amount = suiToMist(0.5); // Returns 500_000_000
+```
+
+### Validating Tip Amount
+
+```typescript
+import { isValidTipAmount, suiToMist } from './lib/sui';
+
+const amount = suiToMist(0.001);
+if (isValidTipAmount(amount)) {
+  // Amount is valid (>= 0.001 SUI)
+}
+```
+
+### Formatting Tip Display
+
+```typescript
+import { formatSui } from './lib/sui';
+
+const tipInMist = 50_000_000;
+const formatted = formatSui(tipInMist); // "0.05 SUI"
+```
+
+<Warning>
+  Minimum tip amount is `1_000_000` MIST (0.001 SUI). Transactions with smaller amounts will fail.
+</Warning>
+
+## Response
+
+On successful execution, the transaction:
+- Adds the tip amount to the comment's balance
+- Emits a `TipComment` event with the comment ID and amount
+- Returns a transaction digest
+
+<ResponseField name="digest" type="string">
+  The transaction digest that can be used to track the transaction on Sui Explorer
+</ResponseField>
+
+<ResponseField name="effects" type="object">
+  Transaction effects including:
+  - Status (success/failure)
+  - Gas used
+  - Modified objects (the comment object)
+</ResponseField>
+
+## Error Handling
+
+Common errors:
+- **Insufficient funds**: User doesn't have enough SUI to cover the tip + gas fees
+- **Invalid comment ID**: The comment object doesn't exist
+- **Amount too small**: Tip amount is less than the minimum (0.001 SUI)
+- **Not found**: Comment object has been deleted or doesn't exist
+
+```typescript
+signAndExecute(
+  { transaction: tx },
+  {
+    onError: (error) => {
+      if (error.message.includes('InsufficientCoinBalance')) {
+        alert('Not enough SUI for this tip');
+      } else if (error.message.includes('not found')) {
+        alert('Comment not found');
+      } else {
+        alert('Failed to send tip: ' + error.message);
+      }
+    },
+  }
+);
+```
+
+## Withdrawing Tips
+
+Comment authors can withdraw accumulated tips using the [`withdraw_comment_tips`](/api/withdraw-tips) function. See the withdrawal documentation for details.

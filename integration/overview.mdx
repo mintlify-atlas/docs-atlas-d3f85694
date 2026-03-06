@@ -1,0 +1,130 @@
+---
+title: 'Developer Guide Overview'
+description: 'Learn how to integrate TUNA as a decentralized news oracle in your application'
+---
+
+# Developer Guide Overview
+
+TUNA acts as a **decentralized News Oracle** on the Sui Network, providing a permissionless, free-to-use news feed indexed on-chain with content permanently stored on Walrus.
+
+## Integration Architecture
+
+The TUNA system consists of two main components:
+
+<Steps>
+  <Step title="The Index (Sui Blockchain)">
+    A Shared Object called the `NewsRegistry` that contains a vector of Blob IDs. This is your on-chain index of all news articles.
+  </Step>
+  
+  <Step title="The Content (Walrus Storage)">
+    Actual article JSON data stored as blobs on the Walrus decentralized storage network. Content is permanent and censorship-resistant.
+  </Step>
+</Steps>
+
+### Data Flow
+
+To fetch news from TUNA, your application follows this path:
+
+```
+Sui Registry → Get Blob IDs → Fetch JSON from Walrus Aggregator
+```
+
+## What You Need to Integrate
+
+<Note>
+  **TL;DR:** You only need the **Registry Object ID** to fetch news. The data is public, permissionless, and free to use.
+</Note>
+
+### For Read Operations (Fetching News)
+
+- **Registry Object ID**: `0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d`
+- **Sui RPC Endpoint**: `https://fullnode.testnet.sui.io:443`
+- **Walrus Aggregator**: `https://aggregator.walrus-testnet.walrus.space/v1`
+
+No wallet, authentication, or SUI tokens required for reading.
+
+### For Write Operations (Tips, Comments)
+
+- **Package ID**: `0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66`
+- **Module Name**: `news_registry`
+- **Connected Wallet**: Required for signing transactions
+- **SUI Tokens**: Required for gas fees and tips
+
+## Use Cases
+
+### News Aggregation
+Build a custom news reader or dashboard that displays Sui ecosystem updates. Filter by category, search content, or create custom feeds.
+
+### Analytics & Research
+Analyze trends in the Sui ecosystem. Track which topics receive the most engagement, monitor sentiment, or identify emerging narratives.
+
+### Social Features
+Integrate TUNA articles into your dApp to allow users to discuss ecosystem news, tip quality content, or share insights with the community.
+
+### Content Discovery
+Use TUNA as a content source for onboarding new users, recommending relevant articles based on their interests, or powering notifications.
+
+## Article Data Structure
+
+Each article returned from TUNA contains:
+
+```typescript
+interface TunaArticle {
+  title: string;          // Article headline
+  summary: string;        // Brief description
+  content: string;        // Full HTML content
+  source: string;         // e.g., "Sui Blog", "@SuiNetwork"
+  url: string;            // Original article link
+  image?: string;         // Cover image URL (optional)
+  timestamp: number;      // Unix timestamp
+  author?: string;        // Author name (optional)
+}
+```
+
+## Engagement Data
+
+Articles also include on-chain engagement metrics:
+
+```typescript
+interface ArticleEngagement {
+  totalTips: number;      // Total SUI tipped (in MIST)
+  tipCount: number;       // Number of tip transactions
+  commentCount: number;   // Number of comments
+}
+```
+
+## Getting Started
+
+Ready to integrate TUNA? Continue to the next sections:
+
+<CardGroup cols={2}>
+  <Card title="Setup" icon="gear" href="/integration/setup">
+    Install dependencies and configure your client
+  </Card>
+  <Card title="Fetching News" icon="download" href="/integration/fetching-news">
+    Learn how to retrieve articles from TUNA
+  </Card>
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/integration/transactions">
+    Build and execute on-chain transactions
+  </Card>
+</CardGroup>
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Do I need a Sui wallet to fetch news?">
+    **No.** Reading from the blockchain is public. You do not need to sign any transactions or hold SUI tokens to fetch news.
+  </Accordion>
+  
+  <Accordion title="Why don't I need the Package ID for reading?">
+    The Package ID is only required if you invoke a Move function (write operation). Since you're only reading the state of a Shared Object (the Registry), the Object ID is sufficient.
+  </Accordion>
+  
+  <Accordion title="Is the data really permanent?">
+    Yes. Content stored on Walrus is permanent and cannot be deleted or modified. The on-chain index on Sui provides immutable proof of publication.
+  </Accordion>
+  
+  <Accordion title="What about rate limits?">
+    The public Sui RPC and Walrus aggregators have rate limits. For production applications, consider running your own infrastructure or implementing caching.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,444 @@
+---
+title: 'CommentSection Component'
+description: 'Full-featured commenting system with wallet authentication'
+---
+
+## Overview
+
+The `CommentSection` component provides a complete commenting system for articles. It includes comment posting, display, and wallet authentication integration.
+
+## Component Interface
+
+```tsx
+interface CommentSectionProps {
+  articleId: string
+}
+```
+
+## Props
+
+<ParamField path="articleId" type="string" required>
+  The unique identifier of the article to display comments for. Used to fetch and post comments.
+</ParamField>
+
+## Usage
+
+### Basic Implementation
+
+```tsx
+import CommentSection from './components/CommentSection'
+
+function ArticleDetail({ article }) {
+  return (
+    <div>
+      <h1>{article.title}</h1>
+      <div>{article.content}</div>
+      
+      <CommentSection articleId={article.id} />
+    </div>
+  )
+}
+```
+
+### In Article Page
+
+```tsx
+export default function ArticlePage() {
+  const { id } = useParams()
+  const { data: article } = useArticle(id)
+
+  return (
+    <article>
+      {/* Article content */}
+      <CommentSection articleId={id} />
+    </article>
+  )
+}
+```
+
+## Features
+
+### Comment Count Badge
+
+Displays total comment count in the section header:
+
+```tsx
+<h3>
+  Comments 
+  <span>{comments?.length || 0}</span>
+</h3>
+```
+
+### Wallet Authentication
+
+Requires wallet connection to post comments:
+
+```tsx
+const account = useCurrentAccount()
+
+{!account ? (
+  <ConnectModal trigger={<button>GET STARTED</button>} />
+) : (
+  <form onSubmit={handleSubmit}>
+    {/* Comment form */}
+  </form>
+)}
+```
+
+<Note>
+  Users must connect a wallet to post comments. The `ConnectModal` from `@mysten/dapp-kit` handles authentication.
+</Note>
+
+### Character Limit
+
+Comments are limited to 280 characters:
+
+```tsx
+<textarea
+  maxLength={280}
+  value={commentText}
+  onChange={(e) => setCommentText(e.target.value)}
+/>
+
+<span>
+  {commentText.length}/280
+</span>
+```
+
+Character count changes color when approaching limit (>250 characters).
+
+## Comment Form
+
+### Form Structure
+
+```tsx
+<form onSubmit={handleSubmit}>
+  <textarea
+    value={commentText}
+    onChange={(e) => setCommentText(e.target.value)}
+    placeholder="What are your thoughts on this story?"
+    maxLength={280}
+  />
+  
+  <div>
+    <span>{commentText.length}/280</span>
+    <button 
+      type="submit" 
+      disabled={!commentText.trim() || isPending}
+    >
+      {isPending ? 'POSTING...' : 'POST COMMENT'}
+    </button>
+  </div>
+</form>
+```
+
+### Submit Handler
+
+```tsx
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!commentText.trim()) return
+
+  postComment({ blobId: articleId, text: commentText }, {
+    onSuccess: () => {
+      setCommentText('')
+    },
+    onError: (err) => {
+      console.error("Failed to post comment:", err)
+      alert("Failed to post comment. See console for details.")
+    }
+  })
+}
+```
+
+### Validation
+
+- Button disabled when textarea is empty or whitespace-only
+- Button disabled during submission (`isPending`)
+- Form cleared on successful submission
+
+## Comment Display
+
+### Loading State
+
+```tsx
+{isLoading ? (
+  <div className="spinner"></div>
+) : (
+  // Comments list
+)}
+```
+
+### Empty State
+
+```tsx
+{comments && comments.length > 0 ? (
+  // Render comments
+) : (
+  <p>No comments yet. Be the first to share your thoughts!</p>
+)}
+```
+
+### Comment Item
+
+Each comment displays:
+
+```tsx
+<div className="comment-item">
+  <div>
+    <span>{comment.author.slice(0, 6)}...{comment.author.slice(-4)}</span>
+    <span>{new Date(comment.timestamp).toLocaleDateString()}</span>
+  </div>
+  <p>{comment.text}</p>
+</div>
+```
+
+**Comment Data:**
+- Shortened wallet address (first 6 and last 4 characters)
+- Formatted timestamp
+- Full comment text
+
+## Comment Interface
+
+```tsx
+interface Comment {
+  id: string
+  blob_id: string
+  author: string
+  preview_text: string
+  content_blob_id: string | null
+  comment_type: 'text' | 'text_long' | 'media'
+  timestamp: number
+  tips_received: number
+  text: string // Loaded from Walrus
+}
+```
+
+## Data Fetching
+
+### Custom Hooks
+
+```tsx
+const { data: comments, isLoading } = useArticleComments(articleId)
+const { mutate: postComment, isPending } = usePostComment()
+```
+
+<ParamField path="useArticleComments" type="hook">
+  Fetches all comments for a specific article.
+  
+  ```tsx
+  function useArticleComments(articleId: string): {
+    data: Comment[] | undefined
+    isLoading: boolean
+  }
+  ```
+</ParamField>
+
+<ParamField path="usePostComment" type="hook">
+  Mutation hook for posting new comments.
+  
+  ```tsx
+  function usePostComment(): {
+    mutate: (params: { blobId: string; text: string }) => void
+    isPending: boolean
+  }
+  ```
+</ParamField>
+
+## Layout Structure
+
+```
+┌──────────────────────────────────────────┐
+│ Comments [5]                             │
+├──────────────────────────────────────────┤
+│                                          │
+│ [Comment Form or Connect Wallet Prompt] │
+│                                          │
+├──────────────────────────────────────────┤
+│ ┌──────────────────────────────────────┐ │
+│ │ 0x1234...5678       Jan 15, 2025    │ │
+│ │ This is a great article!             │ │
+│ └──────────────────────────────────────┘ │
+│                                          │
+│ ┌──────────────────────────────────────┐ │
+│ │ 0xabcd...ef01       Jan 14, 2025    │ │
+│ │ Thanks for sharing!                  │ │
+│ └──────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
+```
+
+## Styling
+
+### Section Styles
+
+```tsx
+style={{
+  marginTop: '4rem',
+  // Section container
+}}
+```
+
+### Header Styles
+
+- 2rem font size
+- Uppercase text
+- 4px bottom border
+- Comment count badge with background
+
+### Form Styles
+
+- Card brutalist styling
+- Background: `var(--bg-card)`
+- Centered content for unauthenticated state
+
+### Textarea Styles
+
+```tsx
+style={{
+  width: '100%',
+  minHeight: '100px',
+  padding: '1rem',
+  background: 'var(--bg-deep)',
+  border: '2px solid var(--border-color)',
+  color: 'var(--text-main)',
+  fontSize: '1rem',
+  resize: 'vertical',
+  fontFamily: 'var(--font-mono)'
+}}
+```
+
+### Comment Item Styles
+
+```tsx
+style={{
+  padding: '1.5rem',
+  border: '2px solid var(--border-color)',
+  background: 'var(--bg-deep)',
+  boxShadow: '4px 4px 0 var(--border-color)'
+}}
+```
+
+## Dependencies
+
+```tsx
+import { useState } from 'react'
+import { useCurrentAccount, ConnectModal } from '@mysten/dapp-kit'
+import { useArticleComments, usePostComment } from '../hooks/useComments'
+```
+
+### Required Hooks
+
+- `useCurrentAccount`: Get connected wallet account
+- `useArticleComments`: Fetch article comments
+- `usePostComment`: Submit new comments
+
+### Required Components
+
+- `ConnectModal`: Wallet connection modal from `@mysten/dapp-kit`
+
+## Wallet Integration
+
+### Account Detection
+
+```tsx
+const account = useCurrentAccount()
+
+if (!account) {
+  // Show connect wallet prompt
+} else {
+  // Show comment form
+}
+```
+
+### Connect Modal State
+
+```tsx
+const [open, setOpen] = useState(false)
+
+<ConnectModal
+  trigger={<button>GET STARTED</button>}
+  open={open}
+  onOpenChange={setOpen}
+/>
+```
+
+## Error Handling
+
+### Post Errors
+
+```tsx
+onError: (err) => {
+  console.error("Failed to post comment:", err)
+  alert("Failed to post comment. See console for details.")
+}
+```
+
+<Warning>
+  Error handling currently uses browser alerts. Consider implementing a toast notification system for better UX.
+</Warning>
+
+### Empty Comment Prevention
+
+```tsx
+if (!commentText.trim()) return
+```
+
+Prevents submission of empty or whitespace-only comments.
+
+## State Management
+
+### Local State
+
+```tsx
+const [commentText, setCommentText] = useState('')
+const [open, setOpen] = useState(false)
+```
+
+### State Reset
+
+Comment text is cleared after successful submission:
+
+```tsx
+onSuccess: () => {
+  setCommentText('')
+}
+```
+
+## Best Practices
+
+<Note>
+  Always check for wallet connection before showing comment forms.
+</Note>
+
+```tsx
+// Good: Check authentication state
+{account ? <CommentForm /> : <ConnectPrompt />}
+
+// Bad: Show form without checking
+<CommentForm />
+```
+
+<Note>
+  Trim whitespace before validation to prevent empty comments.
+</Note>
+
+```tsx
+// Good: Trim and validate
+if (!commentText.trim()) return
+
+// Bad: Check raw value
+if (!commentText) return
+```
+
+## Future Enhancements
+
+Potential features for comment system:
+
+- Comment editing and deletion
+- Nested replies/threading
+- Comment tipping functionality
+- Rich text formatting
+- Media attachments
+- Comment reactions
+- Spam filtering
+- Moderation tools

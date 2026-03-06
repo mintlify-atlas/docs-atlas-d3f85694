@@ -1,0 +1,144 @@
+---
+title: 'Tip Article'
+description: 'Send a tip to an article author'
+---
+
+## Overview
+
+The `tip_article` function allows users to send SUI tokens as a tip to the author of an article stored on Walrus. Tips are sent directly to the article's creator address.
+
+## Function Signature
+
+```typescript
+function createTipArticleTransaction(blobId: string, amount: number): Transaction
+```
+
+## Parameters
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article you want to tip. This is a unique identifier for the article stored on Walrus.
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  The tip amount in MIST (1 SUI = 1,000,000,000 MIST). Must be at least `1_000_000` MIST (0.001 SUI).
+</ParamField>
+
+## Move Call Structure
+
+The transaction builder creates a Move call with the following structure:
+
+```typescript
+tx.moveCall({
+    target: `${PACKAGE_ID}::news_registry::tip_article`,
+    arguments: [
+        tx.object(REGISTRY_ID),      // The news registry shared object
+        tx.pure.string(blobId),      // Article blob ID
+        tipCoin,                      // Split coin for the tip
+    ],
+});
+```
+
+<Note>
+  The function automatically splits the required amount from the gas coin using `tx.splitCoins(tx.gas, [amount])`.
+</Note>
+
+## Gas Coin Splitting
+
+The transaction builder handles coin splitting automatically:
+
+1. Takes the gas coin from the transaction (`tx.gas`)
+2. Splits the specified `amount` from it
+3. Uses the split coin as the tip payment
+4. Remaining gas coin is used for transaction fees
+
+## Usage Example
+
+```typescript
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createTipArticleTransaction, suiToMist } from './lib/sui';
+
+function TipArticleButton({ blobId }: { blobId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleTip = (amountInSui: number) => {
+    // Convert SUI to MIST
+    const amountInMist = suiToMist(amountInSui);
+    
+    // Create the transaction
+    const tx = createTipArticleTransaction(blobId, amountInMist);
+    
+    // Sign and execute
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Tip sent!', result.digest);
+        },
+        onError: (error) => {
+          console.error('Failed to send tip:', error);
+        },
+      }
+    );
+  };
+  
+  return (
+    <button onClick={() => handleTip(0.1)}>
+      Tip 0.1 SUI
+    </button>
+  );
+}
+```
+
+## Helper Functions
+
+### Converting SUI to MIST
+
+```typescript
+import { suiToMist } from './lib/sui';
+
+const amount = suiToMist(0.5); // Returns 500_000_000
+```
+
+### Validating Tip Amount
+
+```typescript
+import { isValidTipAmount, suiToMist } from './lib/sui';
+
+const amount = suiToMist(0.001);
+if (isValidTipAmount(amount)) {
+  // Amount is valid (>= 0.001 SUI)
+}
+```
+
+<Warning>
+  Minimum tip amount is `1_000_000` MIST (0.001 SUI). Transactions with smaller amounts will fail.
+</Warning>
+
+## Response
+
+On successful execution, the transaction:
+- Transfers the tip amount to the article author's address
+- Emits a `TipArticle` event with the blob ID and tip amount
+- Returns a transaction digest that can be used to track the transaction
+
+## Error Handling
+
+Common errors:
+- **Insufficient funds**: User doesn't have enough SUI to cover the tip + gas fees
+- **Invalid blob ID**: The article doesn't exist in the registry
+- **Amount too small**: Tip amount is less than the minimum (0.001 SUI)
+
+```typescript
+signAndExecute(
+  { transaction: tx },
+  {
+    onError: (error) => {
+      if (error.message.includes('InsufficientCoinBalance')) {
+        alert('Not enough SUI for this tip');
+      } else {
+        alert('Failed to send tip: ' + error.message);
+      }
+    },
+  }
+);
+```

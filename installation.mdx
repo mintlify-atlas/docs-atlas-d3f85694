@@ -1,0 +1,581 @@
+---
+title: 'Installation'
+description: 'Complete installation guide for TUNA with detailed setup instructions and configuration options'
+---
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    **Version 18 or higher** required
+    
+    Check your version:
+    ```bash
+    node --version
+    ```
+  </Card>
+  
+  <Card title="Package Manager" icon="box">
+    Choose one:
+    - npm (bundled with Node.js)
+    - yarn
+    - pnpm
+  </Card>
+  
+  <Card title="Sui Wallet" icon="wallet">
+    Browser extension for wallet connection
+    
+    [Install Sui Wallet](https://chrome.google.com/webstore/detail/sui-wallet)
+  </Card>
+  
+  <Card title="Testnet SUI" icon="coins">
+    Required for transactions
+    
+    [Get testnet tokens](https://discord.gg/sui)
+  </Card>
+</CardGroup>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="npm">
+    ### Using npm
+
+    ```bash
+    # Clone the repository
+    git clone <repository-url>
+    cd tuna
+
+    # Install dependencies
+    npm install
+
+    # Copy environment configuration
+    cp .env.example .env.local
+
+    # Start development server
+    npm run dev
+    ```
+  </Tab>
+
+  <Tab title="yarn">
+    ### Using Yarn
+
+    ```bash
+    # Clone the repository
+    git clone <repository-url>
+    cd tuna
+
+    # Install dependencies
+    yarn install
+
+    # Copy environment configuration
+    cp .env.example .env.local
+
+    # Start development server
+    yarn dev
+    ```
+  </Tab>
+
+  <Tab title="pnpm">
+    ### Using pnpm
+
+    ```bash
+    # Clone the repository
+    git clone <repository-url>
+    cd tuna
+
+    # Install dependencies
+    pnpm install
+
+    # Copy environment configuration
+    cp .env.example .env.local
+
+    # Start development server
+    pnpm dev
+    ```
+  </Tab>
+</Tabs>
+
+## Dependencies
+
+TUNA uses the following key dependencies:
+
+### Core Dependencies
+
+```json
+{
+  "@mysten/dapp-kit": "^0.19.11",
+  "@mysten/sui.js": "^0.54.1",
+  "@tanstack/react-query": "^5.90.12",
+  "react": "^19.2.0",
+  "react-dom": "^19.2.0",
+  "react-router-dom": "^7.10.1",
+  "gsap": "^3.13.0"
+}
+```
+
+<AccordionGroup>
+  <Accordion title="@mysten/dapp-kit" icon="wallet">
+    Official Sui dApp integration kit providing:
+    - Wallet connection and management
+    - Transaction signing
+    - Account state management
+    - React hooks for Sui interactions
+  </Accordion>
+
+  <Accordion title="@mysten/sui.js" icon="link">
+    Sui TypeScript SDK for:
+    - Building transactions
+    - Querying blockchain state
+    - Interacting with smart contracts
+    - RPC client functionality
+  </Accordion>
+
+  <Accordion title="@tanstack/react-query" icon="refresh">
+    Data fetching and state management:
+    - Automatic caching and revalidation
+    - Loading and error states
+    - Optimistic updates
+    - Background data synchronization
+  </Accordion>
+
+  <Accordion title="React 19" icon="react">
+    Modern React features:
+    - Improved server components
+    - Enhanced concurrent rendering
+    - Better TypeScript support
+    - Performance optimizations
+  </Accordion>
+</AccordionGroup>
+
+## Environment Configuration
+
+<Steps>
+  <Step title="Create Environment File">
+    Copy the example environment file:
+
+    ```bash
+    cp .env.example .env.local
+    ```
+
+    <Note>
+      Use `.env.local` for local development. This file is automatically ignored by git.
+    </Note>
+  </Step>
+
+  <Step title="Configure Network Settings">
+    Set your Sui network configuration:
+
+    ```env
+    # Network Configuration
+    VITE_SUI_NETWORK=testnet
+    VITE_SUI_RPC_URL=https://fullnode.testnet.sui.io:443
+    ```
+
+    <Tip>
+      For development, always use **testnet**. Mainnet deployment requires additional configuration and real SUI tokens.
+    </Tip>
+  </Step>
+
+  <Step title="Set Contract Addresses">
+    Configure the deployed smart contract addresses:
+
+    ```env
+    # Contract Addresses (Testnet)
+    VITE_PACKAGE_ID=0xc19c25a9e42f77c2466a1df42d99a160a65a8800711eef447bb8da441df33c9e
+    VITE_REGISTRY_ID=0x65fa3ee1fa53af68c36dd47b525392dfb844726af980f758c1b6dc353a30e962
+    VITE_ADMIN_CAP_ID=0x87c090e5a60dd505d3ef7634e6f32ced2134640f56b329946ab920a3a9299f6e
+    ```
+
+    <Warning>
+      These addresses are specific to the TUNA testnet deployment. Don't change them unless you're deploying your own contracts.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Walrus Storage">
+    Set up Walrus decentralized storage endpoints:
+
+    ```env
+    # Walrus Configuration (Testnet)
+    VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space/v1/store
+    VITE_WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space/v1
+    ```
+
+    <Note>
+      Walrus is used for storing article content and media in a decentralized manner. The aggregator fetches content, while the publisher handles uploads.
+    </Note>
+  </Step>
+</Steps>
+
+## Configuration Reference
+
+All configuration is loaded from environment variables and consolidated in `src/config/index.ts`:
+
+<CodeGroup>
+```typescript Contract Configuration
+// src/config/index.ts
+export const CONTRACT_CONFIG = {
+  PACKAGE_ID: import.meta.env.VITE_PACKAGE_ID,
+  REGISTRY_ID: import.meta.env.VITE_REGISTRY_ID,
+  ADMIN_CAP_ID: import.meta.env.VITE_ADMIN_CAP_ID,
+  MODULE_NAME: 'news_registry',
+} as const;
+```
+
+```typescript Network Configuration
+export const NETWORK_CONFIG = {
+  NETWORK: (import.meta.env.VITE_SUI_NETWORK || 'testnet') as 'testnet' | 'mainnet' | 'devnet',
+  RPC_URL: import.meta.env.VITE_SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443',
+} as const;
+```
+
+```typescript Walrus Configuration
+export const WALRUS_CONFIG = {
+  PUBLISHER_URL: import.meta.env.VITE_WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space/v1/store',
+  AGGREGATOR_URL: import.meta.env.VITE_WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space/v1',
+} as const;
+```
+
+```typescript Application Constants
+export const CONSTANTS = {
+  SHORT_COMMENT_THRESHOLD: 280,
+  MIN_TIP_AMOUNT: 1_000_000, // 0.001 SUI in MIST
+  MAX_PREVIEW_LENGTH: 280,
+} as const;
+
+export const CATEGORIES = [
+  'DeFi',
+  'Gaming',
+  'NFT',
+  'Dev',
+  'Governance',
+  'General',
+] as const;
+```
+</CodeGroup>
+
+## Development Server
+
+### Available Scripts
+
+TUNA includes several npm scripts from `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="npm run dev" icon="play">
+    Start the development server with hot module replacement
+    
+    Runs on: `http://localhost:5173`
+  </Card>
+  
+  <Card title="npm run build" icon="hammer">
+    Build for production
+    
+    Outputs to: `dist/`
+  </Card>
+  
+  <Card title="npm run lint" icon="check">
+    Run ESLint for code quality
+    
+    Checks all `.ts` and `.tsx` files
+  </Card>
+  
+  <Card title="npm run preview" icon="eye">
+    Preview production build locally
+    
+    Serves the `dist/` folder
+  </Card>
+</CardGroup>
+
+### Development Workflow
+
+<Steps>
+  <Step title="Start Development Server">
+    ```bash
+    npm run dev
+    ```
+    
+    The server starts on `http://localhost:5173` with:
+    - ⚡️ Fast HMR (Hot Module Replacement)
+    - 🔄 Automatic page reload on changes
+    - 📊 React Query DevTools
+    - 🐛 Source maps for debugging
+  </Step>
+
+  <Step title="Make Changes">
+    Edit any file in `src/` and see changes instantly:
+    
+    ```bash
+    tuna/
+    ├── src/
+    │   ├── components/     # UI components
+    │   ├── hooks/          # Custom React hooks
+    │   ├── lib/            # Utilities and helpers
+    │   ├── types/          # TypeScript type definitions
+    │   ├── config/         # Configuration
+    │   ├── App.tsx         # Main app component
+    │   └── main.tsx        # Application entry point
+    ```
+  </Step>
+
+  <Step title="Run Linting">
+    Check code quality before committing:
+    
+    ```bash
+    npm run lint
+    ```
+    
+    ESLint will check for:
+    - TypeScript errors
+    - React best practices
+    - Code style issues
+  </Step>
+
+  <Step title="Build for Production">
+    Create an optimized production build:
+    
+    ```bash
+    npm run build
+    ```
+    
+    This will:
+    - Type-check with TypeScript
+    - Bundle and minify code
+    - Optimize assets
+    - Generate source maps
+  </Step>
+</Steps>
+
+## Project Structure
+
+Understanding the TUNA codebase:
+
+```bash
+tuna/
+├── src/
+│   ├── components/           # React components
+│   │   ├── NewsCard.tsx      # Article card display
+│   │   ├── TipModal.tsx      # Tipping interface
+│   │   ├── CommentSection.tsx # Comments UI
+│   │   └── ...
+│   ├── hooks/                # Custom React hooks
+│   │   ├── useNews.ts        # Fetch news articles
+│   │   ├── useComments.ts    # Fetch comments
+│   │   └── ...
+│   ├── lib/                  # Utility functions
+│   │   ├── sui.ts            # Sui transaction builders
+│   │   ├── walrus.ts         # Walrus integration
+│   │   └── utils.ts          # Helper functions
+│   ├── types/                # TypeScript types
+│   │   └── index.ts          # Type definitions
+│   ├── config/               # Configuration
+│   │   └── index.ts          # App configuration
+│   ├── App.tsx               # Main application
+│   ├── main.tsx              # Entry point
+│   └── index.css             # Global styles
+├── public/                   # Static assets
+├── .env.example              # Environment template
+├── .env.local                # Local configuration (gitignored)
+├── package.json              # Dependencies and scripts
+├── tsconfig.json             # TypeScript configuration
+├── vite.config.ts            # Vite configuration
+└── README.md                 # Project documentation
+```
+
+## Wallet Setup
+
+<Steps>
+  <Step title="Install Sui Wallet">
+    Download and install the Sui Wallet browser extension:
+    
+    - [Chrome Web Store](https://chrome.google.com/webstore/detail/sui-wallet)
+    - [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sui-wallet/)
+    
+    <Tip>
+      Other compatible wallets include Suiet, Ethos Wallet, and Martian Wallet.
+    </Tip>
+  </Step>
+
+  <Step title="Create or Import Wallet">
+    Follow the wallet setup wizard:
+    
+    1. Create a new wallet or import existing
+    2. **Save your recovery phrase** securely
+    3. Set a strong password
+    4. Complete the setup
+    
+    <Warning>
+      Never share your recovery phrase or private keys with anyone. TUNA developers will never ask for this information.
+    </Warning>
+  </Step>
+
+  <Step title="Switch to Testnet">
+    Configure your wallet for testnet:
+    
+    1. Open Sui Wallet
+    2. Click settings (⚙️ icon)
+    3. Navigate to Network
+    4. Select **Testnet**
+    
+    <Note>
+      TUNA currently runs on Sui testnet. Make sure your wallet is on the correct network.
+    </Note>
+  </Step>
+
+  <Step title="Get Testnet Tokens">
+    Obtain testnet SUI from the faucet:
+    
+    1. Join the [Sui Discord](https://discord.gg/sui)
+    2. Go to the `#testnet-faucet` channel
+    3. Use the command: `!faucet <your-address>`
+    4. Wait for tokens to arrive
+    
+    Alternatively, use the [web faucet](https://sui-testnet-faucet.vercel.app/)
+  </Step>
+</Steps>
+
+## Verification
+
+Verify your installation:
+
+<Tabs>
+  <Tab title="Check Installation">
+    ```bash
+    # Verify Node.js version
+    node --version  # Should be 18 or higher
+
+    # Verify npm is working
+    npm --version
+
+    # Check dependencies are installed
+    npm list --depth=0
+    ```
+  </Tab>
+
+  <Tab title="Test Development Server">
+    ```bash
+    # Start the server
+    npm run dev
+
+    # You should see:
+    # VITE v7.2.5  ready in XXX ms
+    # ➜  Local:   http://localhost:5173/
+    # ➜  Network: use --host to expose
+    ```
+    
+    Open `http://localhost:5173` in your browser.
+  </Tab>
+
+  <Tab title="Verify Configuration">
+    Check that environment variables are loaded:
+    
+    ```typescript
+    // Add this temporarily to src/App.tsx
+    console.log('Contract Config:', CONTRACT_CONFIG);
+    console.log('Network:', NETWORK_CONFIG.NETWORK);
+    ```
+    
+    Open browser console and verify the output.
+  </Tab>
+
+  <Tab title="Test Wallet Connection">
+    1. Open the app at `http://localhost:5173`
+    2. Click "Connect Wallet"
+    3. Approve the connection
+    4. Verify your address appears in the UI
+    
+    If successful, you're ready to use TUNA!
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Installation Errors" icon="triangle-exclamation">
+    **Problem**: `npm install` fails with errors
+    
+    **Solutions**:
+    - Clear npm cache: `npm cache clean --force`
+    - Delete `node_modules` and `package-lock.json`, then reinstall
+    - Use Node.js LTS version (18 or 20)
+    - Try using yarn or pnpm instead
+    - Check for network/firewall issues
+  </Accordion>
+
+  <Accordion title="Port Already in Use" icon="plug">
+    **Problem**: Port 5173 is already in use
+    
+    **Solutions**:
+    - Kill the process using port 5173
+    - Use a different port: `npm run dev -- --port 3000`
+    - Check for other Vite dev servers running
+  </Accordion>
+
+  <Accordion title="TypeScript Errors" icon="code">
+    **Problem**: TypeScript compilation errors
+    
+    **Solutions**:
+    - Ensure all dependencies are installed
+    - Run `npm install @types/node -D`
+    - Check `tsconfig.json` is present
+    - Restart your IDE/editor
+    - Run `tsc --noEmit` to see all errors
+  </Accordion>
+
+  <Accordion title="Environment Variables Not Loading" icon="gear">
+    **Problem**: Configuration values are undefined
+    
+    **Solutions**:
+    - Ensure file is named `.env.local` (not `.env`)
+    - Restart the dev server after changing `.env.local`
+    - Verify all variables start with `VITE_`
+    - Check for syntax errors in the env file
+    - Use `import.meta.env.VITE_*` to access variables
+  </Accordion>
+
+  <Accordion title="Wallet Connection Issues" icon="wallet">
+    **Problem**: Cannot connect wallet
+    
+    **Solutions**:
+    - Install Sui Wallet extension
+    - Unlock your wallet
+    - Switch to testnet in wallet settings
+    - Refresh the page
+    - Clear browser cache
+    - Try a different browser
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/concepts/architecture">
+    Learn how TUNA works
+  </Card>
+  
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Start building with TUNA
+  </Card>
+  
+  <Card title="Features" icon="sparkles" href="/features/news-feed">
+    Explore TUNA's key features
+  </Card>
+</CardGroup>
+
+<Tip>
+  Successfully installed TUNA? Head over to the [Quickstart](/quickstart) to connect your wallet and start exploring!
+</Tip>

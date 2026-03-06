@@ -1,0 +1,258 @@
+---
+title: 'NewsCard Component'
+description: 'Display news articles with engagement features and animations'
+---
+
+## Overview
+
+The `NewsCard` component displays news articles with images, metadata, category tags, and engagement actions. It features GSAP animations for entrance and hover effects.
+
+## Component Interface
+
+```tsx
+import type { NewsArticle } from '../types'
+
+interface NewsCardProps {
+  article: NewsArticle
+  size?: 'regular' | 'featured'
+}
+```
+
+## Props
+
+<ParamField path="article" type="NewsArticle" required>
+  The news article object to display. Contains all article data including metadata and engagement stats.
+  
+  ```tsx
+  interface NewsArticle {
+    id: string
+    blob_id: string
+    title: string
+    category: string
+    source: 'twitter' | 'rss' | 'onchain'
+    timestamp: number
+    content?: string
+    summary?: string
+    url?: string
+    image?: string
+    author?: string
+    totalTips: number
+    tipCount: number
+    commentCount: number
+  }
+  ```
+</ParamField>
+
+<ParamField path="size" type="'regular' | 'featured'" default="'regular'">
+  Controls the card's minimum height:
+  - `regular`: 400px minimum height
+  - `featured`: 500px minimum height
+</ParamField>
+
+## Usage
+
+### Basic Implementation
+
+```tsx
+import NewsCard from './components/NewsCard'
+import type { NewsArticle } from './types'
+
+function ArticleList({ articles }: { articles: NewsArticle[] }) {
+  return (
+    <div className="article-grid">
+      {articles.map(article => (
+        <NewsCard key={article.id} article={article} />
+      ))}
+    </div>
+  )
+}
+```
+
+### Featured Card
+
+```tsx
+<NewsCard 
+  article={featuredArticle} 
+  size="featured" 
+/>
+```
+
+## Features
+
+### Image Handling
+
+The component automatically handles missing images:
+
+```tsx
+const bgImage = article.image
+  ? getProxiedImageUrl(article.image)
+  : `https://placehold.co/600x400/000000/FFF?text=${article.category || 'News'}`
+```
+
+<Note>
+  Images are proxied through a utility function for security and caching.
+</Note>
+
+### Source Filtering
+
+Twitter sources are automatically filtered out:
+
+```tsx
+if (article.source === 'twitter') return null
+```
+
+### Category Tag
+
+Displays a prominent category badge in the top-right corner:
+
+- Yellow background (`--accent-warning`)
+- Black border and shadow
+- Uppercase monospace font
+- Positioned absolutely
+
+### Engagement Display
+
+Shows comment and tip counts in the footer:
+
+```tsx
+💬 {article.commentCount || 0}
+💰 {article.totalTips || 0} SUI
+```
+
+## Animations
+
+### Entrance Animation
+
+Cards fade and slide in when scrolling into view:
+
+```tsx
+gsap.fromTo(cardRef.current,
+  { y: 30, opacity: 0 },
+  {
+    y: 0, 
+    opacity: 1, 
+    duration: 0.5, 
+    ease: "power2.out",
+    scrollTrigger: {
+      trigger: cardRef.current,
+      start: "top 90%"
+    }
+  }
+)
+```
+
+### Hover Animation
+
+Cards lift and change border color on hover:
+
+```tsx
+// Mouse enter
+gsap.to(cardRef.current, {
+  y: -4,
+  boxShadow: "6px 6px 0px #000",
+  borderColor: "var(--accent-primary)",
+  duration: 0.2
+})
+
+// Mouse leave
+gsap.to(cardRef.current, {
+  y: 0,
+  boxShadow: "4px 4px 0px #000",
+  borderColor: "#000",
+  duration: 0.2
+})
+```
+
+## Actions
+
+### Tip Button
+
+Opens the `TipModal` component:
+
+```tsx
+<button
+  onClick={() => setIsTipModalOpen(true)}
+  className="btn-brutal"
+>
+  💰 TIP
+</button>
+```
+
+### Read Button
+
+Navigates to the full article page:
+
+```tsx
+<Link
+  to={`/article/${article.id}`}
+  className="btn-brutal"
+>
+  READ ↗
+</Link>
+```
+
+## Layout Structure
+
+```
+┌─────────────────────────────────┐
+│ [Background Image with Overlay] │
+│                     [CATEGORY]  │
+│                                 │
+│                                 │
+│  Title                          │
+│  Date • Source                  │
+│  Summary text...                │
+│                                 │
+│  [💰 TIP] [READ ↗]   💬 0 💰 0  │
+└─────────────────────────────────┘
+```
+
+## Styling
+
+### Card Container
+
+- Brutalist card styling with borders and shadows
+- Background image with gradient overlay
+- Flexbox layout with content at bottom
+- Responsive padding with `clamp()`
+
+### Content Positioning
+
+- Absolute category tag
+- Relative content container with z-index
+- White text with text shadows for readability
+- Flexible action button layout
+
+## Dependencies
+
+```tsx
+import { useRef, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import type { NewsArticle } from '../types'
+import TipModal from './TipModal'
+import { getProxiedImageUrl } from '../lib/utils'
+import './NewsCard.css'
+```
+
+## Related Components
+
+- [TipModal](/components/tip-modal) - Embedded for tipping functionality
+- [ArticleDetail](/guides/article-detail) - Full article view destination
+
+## Best Practices
+
+<Note>
+  Always provide fallback data for optional article fields to prevent UI breaking.
+</Note>
+
+```tsx
+// Good: Fallbacks for missing data
+{article.summary || article.content?.substring(0, 150) || 'No description available'}
+{article.commentCount || 0}
+
+// Bad: Direct access without fallbacks
+{article.summary}
+{article.commentCount}
+```

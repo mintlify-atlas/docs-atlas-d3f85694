@@ -1,0 +1,351 @@
+---
+title: "useArticle"
+description: "Fetch a single news article by its blob ID"
+---
+
+## Overview
+
+The `useArticle` hook fetches a single news article from the Sui blockchain registry using its Walrus blob ID. It retrieves the full article content from Walrus storage and includes current engagement data (tips and comments).
+
+## Function Signature
+
+```typescript
+function useArticle(blobId: string): UseQueryResult<NewsArticle | null, Error>
+```
+
+## Parameters
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article to fetch. This is a unique identifier for the article stored in Walrus.
+</ParamField>
+
+## Return Type
+
+Returns a React Query `UseQueryResult` object containing:
+
+<ResponseField name="data" type="NewsArticle | null">
+  The complete article object with full content and engagement data, or `null` if the article failed to load
+
+  <ResponseField name="id" type="string">
+    Unique identifier for the article (same as blob_id)
+  </ResponseField>
+
+  <ResponseField name="blob_id" type="string">
+    Walrus blob ID containing the article content
+  </ResponseField>
+
+  <ResponseField name="title" type="string">
+    Article title
+  </ResponseField>
+
+  <ResponseField name="category" type="string">
+    Article category (currently defaults to 'General')
+  </ResponseField>
+
+  <ResponseField name="source" type="'twitter' | 'rss' | 'onchain'">
+    Source where the article originated
+  </ResponseField>
+
+  <ResponseField name="timestamp" type="number">
+    Unix timestamp when the article was published
+  </ResponseField>
+
+  <ResponseField name="content" type="string" optional>
+    Full article content fetched from Walrus
+  </ResponseField>
+
+  <ResponseField name="summary" type="string" optional>
+    Article summary or excerpt
+  </ResponseField>
+
+  <ResponseField name="url" type="string" optional>
+    Original article URL if available
+  </ResponseField>
+
+  <ResponseField name="image" type="string" optional>
+    Article cover image URL
+  </ResponseField>
+
+  <ResponseField name="author" type="string" optional>
+    Article author name
+  </ResponseField>
+
+  <ResponseField name="totalTips" type="number">
+    Total amount of tips received in SUI tokens
+  </ResponseField>
+
+  <ResponseField name="tipCount" type="number">
+    Number of individual tips received
+  </ResponseField>
+
+  <ResponseField name="commentCount" type="number">
+    Total number of comments on the article
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Whether the query is currently loading
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  Error object if the query failed
+</ResponseField>
+
+<ResponseField name="refetch" type="() => Promise<void>">
+  Function to manually refetch the article data
+</ResponseField>
+
+## Usage
+
+<CodeGroup>
+
+```tsx Basic Article View
+import { useArticle } from '@tuna/sdk';
+
+function ArticleDetail({ blobId }: { blobId: string }) {
+  const { data: article, isLoading, error } = useArticle(blobId);
+
+  if (isLoading) return <div>Loading article...</div>;
+  if (error) return <div>Error loading article</div>;
+  if (!article) return <div>Article not found</div>;
+
+  return (
+    <article>
+      {article.image && <img src={article.image} alt={article.title} />}
+      <h1>{article.title}</h1>
+      
+      <div>
+        <span>By {article.author}</span>
+        <span>Source: {article.source}</span>
+        <time>{new Date(article.timestamp * 1000).toLocaleDateString()}</time>
+      </div>
+
+      <p>{article.summary}</p>
+      <div dangerouslySetInnerHTML={{ __html: article.content || '' }} />
+    </article>
+  );
+}
+```
+
+```tsx With Engagement Data
+import { useArticle } from '@tuna/sdk';
+
+function ArticleWithEngagement({ blobId }: { blobId: string }) {
+  const { data: article } = useArticle(blobId);
+
+  if (!article) return null;
+
+  return (
+    <div>
+      <h1>{article.title}</h1>
+      <p>{article.content}</p>
+
+      <div className="engagement">
+        <div>
+          <span>💰 {article.totalTips} SUI</span>
+          <small>from {article.tipCount} tips</small>
+        </div>
+        
+        <div>
+          <span>💬 {article.commentCount}</span>
+          <small>comments</small>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+```tsx With URL Routing
+import { useArticle } from '@tuna/sdk';
+import { useParams } from 'react-router-dom';
+
+function ArticlePage() {
+  const { blobId } = useParams<{ blobId: string }>();
+  const { data: article, isLoading } = useArticle(blobId || '');
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!article) {
+    return (
+      <div>
+        <h1>404 - Article Not Found</h1>
+        <p>The article you're looking for doesn't exist.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1>{article.title}</h1>
+      <p>{article.summary}</p>
+      
+      {article.url && (
+        <a href={article.url} target="_blank" rel="noopener noreferrer">
+          View Original Article
+        </a>
+      )}
+      
+      <div>{article.content}</div>
+    </div>
+  );
+}
+```
+
+```tsx With Conditional Rendering
+import { useArticle } from '@tuna/sdk';
+
+function ArticlePreview({ blobId }: { blobId: string }) {
+  const { data: article, isLoading, error } = useArticle(blobId);
+
+  return (
+    <div>
+      {isLoading && <p>Loading article...</p>}
+      
+      {error && (
+        <div className="error">
+          <p>Failed to load article</p>
+          <small>{error.message}</small>
+        </div>
+      )}
+      
+      {article && (
+        <div>
+          <h2>{article.title}</h2>
+          
+          {article.source === 'twitter' && (
+            <span className="badge">🐦 Twitter</span>
+          )}
+          {article.source === 'rss' && (
+            <span className="badge">📰 RSS</span>
+          )}
+          {article.source === 'onchain' && (
+            <span className="badge">⛓️ On-Chain</span>
+          )}
+          
+          <p>{article.summary || article.content?.slice(0, 200)}...</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+## Query Configuration
+
+The hook is configured with the following React Query options:
+
+- **Query Key**: `['article', blobId]`
+- **Enabled**: Only when `blobId` is provided (truthy)
+- **Caching**: Automatically cached by React Query based on the blob ID
+
+<Note>
+  The query will not execute if `blobId` is an empty string or undefined. This prevents unnecessary API calls.
+</Note>
+
+## Error Handling
+
+If the article fails to fetch (e.g., invalid blob ID or Walrus error), the hook returns `null` for the data field and logs the error to the console.
+
+```tsx
+import { useArticle } from '@tuna/sdk';
+
+function SafeArticleView({ blobId }: { blobId: string }) {
+  const { data: article, error } = useArticle(blobId);
+
+  if (error) {
+    console.error('Article fetch error:', error);
+    return <div>Unable to load article. Please try again later.</div>;
+  }
+
+  if (article === null) {
+    return <div>Article not found or failed to load.</div>;
+  }
+
+  return <div>{article.title}</div>;
+}
+```
+
+## Combining with Comments
+
+The `useArticle` hook works seamlessly with comment hooks:
+
+```tsx
+import { useArticle, useArticleComments } from '@tuna/sdk';
+
+function FullArticleView({ blobId }: { blobId: string }) {
+  const { data: article, isLoading: articleLoading } = useArticle(blobId);
+  const { data: comments, isLoading: commentsLoading } = useArticleComments(blobId);
+
+  if (articleLoading) return <div>Loading...</div>;
+  if (!article) return <div>Article not found</div>;
+
+  return (
+    <div>
+      <article>
+        <h1>{article.title}</h1>
+        <p>{article.content}</p>
+        <p>{article.commentCount} comments</p>
+      </article>
+
+      <section>
+        <h2>Comments</h2>
+        {commentsLoading ? (
+          <p>Loading comments...</p>
+        ) : (
+          comments?.map((comment) => (
+            <div key={comment.id}>
+              <p>{comment.text}</p>
+            </div>
+          ))
+        )}
+      </section>
+    </div>
+  );
+}
+```
+
+## Engagement Data Updates
+
+Engagement data (tips and comment count) is fetched fresh each time the query runs. To see updated engagement:
+
+```tsx
+import { useArticle } from '@tuna/sdk';
+
+function ArticleWithRefresh({ blobId }: { blobId: string }) {
+  const { data: article, refetch, isLoading } = useArticle(blobId);
+
+  return (
+    <div>
+      <h1>{article?.title}</h1>
+      
+      <div>
+        <span>💰 {article?.totalTips} SUI</span>
+        <span>💬 {article?.commentCount} comments</span>
+      </div>
+
+      <button onClick={() => refetch()} disabled={isLoading}>
+        {isLoading ? 'Refreshing...' : 'Refresh Engagement'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Performance Considerations
+
+- The hook fetches both blockchain data (engagement) and Walrus data (content) in a single query
+- Data is automatically cached by React Query based on the blob ID
+- Subsequent renders with the same blob ID will use cached data
+- Failed fetches return `null` instead of throwing, allowing graceful error handling
+
+## See Also
+
+- [useLatestNews](/hooks/use-news) - Fetch multiple latest articles
+- [useArticleComments](/hooks/use-comments) - Fetch comments for an article
+- [NewsArticle Type](/types#newsarticle) - Full type definition
+- [Walrus Storage](/core/walrus) - Understanding Walrus blob storage

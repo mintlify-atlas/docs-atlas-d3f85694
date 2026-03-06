@@ -1,0 +1,489 @@
+---
+title: 'Header & Footer Components'
+description: 'Navigation, wallet connection, and layout components'
+---
+
+## Overview
+
+The `Header` and `Footer` components provide consistent navigation and layout structure across the TUNA application. The header features responsive navigation with wallet integration, while the footer contains links and branding.
+
+## Header Component
+
+### Component Interface
+
+```tsx
+interface HeaderProps {
+  activeTab?: string
+  onTabChange?: (tab: string) => void
+}
+```
+
+### Props
+
+<ParamField path="activeTab" type="string" default="'latest'">
+  Currently active navigation tab. Used to highlight the active link.
+  
+  **Options:**
+  - `'latest'`: Latest news feed
+  - `'trending'`: Trending articles
+</ParamField>
+
+<ParamField path="onTabChange" type="(tab: string) => void">
+  Callback function invoked when user clicks a navigation tab.
+</ParamField>
+
+### Usage
+
+```tsx
+import Header from './components/Header'
+import { useState } from 'react'
+
+function App() {
+  const [activeTab, setActiveTab] = useState('latest')
+
+  return (
+    <>
+      <Header 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+      />
+      {/* Page content */}
+    </>
+  )
+}
+```
+
+## Header Features
+
+### Logo & Branding
+
+Primary branding with link to homepage:
+
+```tsx
+<Link to="/">
+  <h1>
+    TUNA<span>.</span>
+  </h1>
+</Link>
+<span>SUI ECOSYSTEM NEWS</span>
+```
+
+**Styling:**
+- Large, bold typography with negative letter spacing
+- Text shadow for depth
+- Accent-colored period
+- Monospace subtitle
+
+### Navigation Tabs
+
+Tab-based navigation for content filtering:
+
+```tsx
+<button
+  onClick={() => onTabChange?.('latest')}
+  style={{
+    color: activeTab === 'latest' 
+      ? 'var(--accent-primary)' 
+      : 'var(--text-main)'
+  }}
+>
+  LATEST
+</button>
+
+<button
+  onClick={() => onTabChange?.('trending')}
+  style={{
+    color: activeTab === 'trending' 
+      ? 'var(--accent-primary)' 
+      : 'var(--text-main)'
+  }}
+>
+  TRENDING
+</button>
+```
+
+### Wallet Integration
+
+Connects to Sui wallet using `@mysten/dapp-kit`:
+
+```tsx
+const account = useCurrentAccount()
+const { mutate: disconnect } = useDisconnectWallet()
+const [open, setOpen] = useState(false)
+
+{account ? (
+  <>
+    <span>
+      {account.address.slice(0, 6)}...{account.address.slice(-4)}
+    </span>
+    <button onClick={() => disconnect()}>
+      LOGOUT
+    </button>
+  </>
+) : (
+  <ConnectModal
+    trigger={<button>GET STARTED</button>}
+    open={open}
+    onOpenChange={setOpen}
+  />
+)}
+```
+
+**Features:**
+- Displays shortened wallet address when connected
+- Logout button to disconnect wallet
+- Connect modal for wallet selection
+
+### Mobile Menu
+
+Hamburger menu for responsive navigation:
+
+```tsx
+const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+<button 
+  className="hamburger-btn"
+  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+>
+  {/* 3 horizontal lines */}
+</button>
+
+{mobileMenuOpen && (
+  <div className="mobile-menu-overlay">
+    <div className="mobile-menu">
+      {/* Navigation links */}
+      {/* Wallet section */}
+    </div>
+  </div>
+)}
+```
+
+**Mobile Features:**
+- Slide-in menu from right
+- Full-height overlay with backdrop
+- Same navigation and wallet options as desktop
+- Close button and overlay click to dismiss
+
+### Entrance Animation
+
+GSAP animation on mount:
+
+```tsx
+useEffect(() => {
+  const ctx = gsap.context(() => {
+    gsap.from(headerRef.current, {
+      y: -100,
+      opacity: 0,
+      duration: 1,
+      ease: "power4.out"
+    })
+  }, headerRef)
+
+  return () => ctx.revert()
+}, [])
+```
+
+### Sticky Positioning
+
+Header stays at top during scroll:
+
+```tsx
+style={{
+  position: 'sticky',
+  top: 0,
+  zIndex: 100
+}}
+```
+
+## Footer Component
+
+### Component Interface
+
+```tsx
+export default function Footer(): JSX.Element
+```
+
+No props required - footer is static content.
+
+### Usage
+
+```tsx
+import Footer from './components/Footer'
+
+function App() {
+  return (
+    <>
+      {/* Page content */}
+      <Footer />
+    </>
+  )
+}
+```
+
+## Footer Features
+
+### Three-Column Layout
+
+Responsive grid layout:
+
+```tsx
+style={{
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+  gap: 'clamp(2rem, 4vw, 4rem)'
+}}
+```
+
+**Columns:**
+1. **Logo & Tagline**: Branding and description
+2. **About Links**: Navigation to info pages
+3. **Connect Links**: Social media and contact
+
+### Logo Section
+
+```tsx
+<h3>TUNA<span>.</span></h3>
+<p>
+  Your decentralized source for Sui ecosystem news. 
+  Powered by Walrus storage and on-chain verification.
+</p>
+```
+
+### About Links
+
+```tsx
+const aboutLinks = [
+  'How It Works',
+  'Smart Contract',
+  'Walrus Storage',
+  'Team'
+]
+```
+
+<Note>
+  Current links use `#` placeholders. Replace with actual routes when pages are created.
+</Note>
+
+### Social Links
+
+```tsx
+const socialLinks = [
+  { label: '𝕏 Twitter', href: 'https://twitter.com' },
+  { label: '📱 Telegram', href: 'https://telegram.org' },
+  { label: '💬 Discord', href: 'https://discord.com' },
+  { label: '📧 Email', href: 'mailto:hello@tuna.news' }
+]
+```
+
+### Hover Effects
+
+Links change color on hover:
+
+```tsx
+onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent-primary)'}
+onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+```
+
+### Copyright Section
+
+Centered footer bar:
+
+```tsx
+<div>
+  <p>Copyright ©2025 TUNA. All rights reserved. | Built on Sui</p>
+</div>
+```
+
+## Layout Structure
+
+### Header Layout
+
+```
+┌────────────────────────────────────────────────┐
+│ TUNA.                    [LATEST] [TRENDING]  │
+│ SUI ECOSYSTEM NEWS       [0x1234...] [LOGOUT] │
+│                          or [GET STARTED]  [≡] │
+└────────────────────────────────────────────────┘
+```
+
+### Footer Layout
+
+```
+┌────────────────────────────────────────────────┐
+│ TUNA.            About          Connect        │
+│ Description      • How It Works • Twitter      │
+│                  • Contract     • Telegram     │
+│                  • Walrus       • Discord      │
+│                  • Team         • Email        │
+├────────────────────────────────────────────────┤
+│     Copyright ©2025 TUNA. Built on Sui        │
+└────────────────────────────────────────────────┘
+```
+
+## Responsive Behavior
+
+### Header Breakpoints
+
+**Desktop (> 769px):**
+- Show navigation buttons
+- Show wallet section
+- Hide hamburger menu
+
+**Mobile (≤ 768px):**
+- Hide navigation buttons
+- Hide desktop wallet section
+- Show hamburger menu
+- Slide-in mobile menu on click
+
+### Footer Breakpoints
+
+Auto-responsive grid:
+- Minimum column width: 250px
+- Automatically stacks on small screens
+- Responsive padding and gaps with `clamp()`
+
+## Styling
+
+### Header Styles
+
+```tsx
+style={{
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 'clamp(1rem, 3vw, 1.5rem) clamp(1rem, 3vw, 2rem)',
+  borderBottom: '4px solid black',
+  background: 'var(--bg-deep)',
+  position: 'sticky',
+  top: 0,
+  zIndex: 100
+}}
+```
+
+### Footer Styles
+
+```tsx
+style={{
+  background: 'var(--bg-deep)',
+  borderTop: '4px solid black',
+  marginTop: 'auto',
+  padding: 'clamp(3rem, 5vw, 5rem) clamp(1rem, 3vw, 2rem)'
+}}
+```
+
+### Mobile Menu Animation
+
+```css
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+```
+
+## Dependencies
+
+### Header
+
+```tsx
+import { useRef, useEffect, useState } from 'react'
+import gsap from 'gsap'
+import { useCurrentAccount, useDisconnectWallet, ConnectModal } from '@mysten/dapp-kit'
+import { Link } from 'react-router-dom'
+```
+
+### Footer
+
+```tsx
+// No external dependencies
+export default function Footer() {}
+```
+
+## Best Practices
+
+<Note>
+  Always provide fallback for `onTabChange` callback to prevent errors.
+</Note>
+
+```tsx
+// Good: Optional chaining
+onClick={() => onTabChange?.('latest')}
+
+// Bad: Direct call without check
+onClick={() => onTabChange('latest')}
+```
+
+<Note>
+  Clean up GSAP contexts to prevent memory leaks.
+</Note>
+
+```tsx
+useEffect(() => {
+  const ctx = gsap.context(() => {
+    // animations
+  })
+  return () => ctx.revert() // Important!
+}, [])
+```
+
+## Accessibility
+
+### ARIA Labels
+
+```tsx
+<button aria-label="Toggle menu">
+  {/* Hamburger icon */}
+</button>
+```
+
+### Keyboard Navigation
+
+- All interactive elements are keyboard accessible
+- Tab order follows visual layout
+- Enter/Space activate buttons and links
+
+### Link Targets
+
+External links open in new tabs:
+
+```tsx
+<a
+  href={item.href}
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  {item.label}
+</a>
+```
+
+## Integration Example
+
+Complete app layout:
+
+```tsx
+import Header from './components/Header'
+import Footer from './components/Footer'
+import { useState } from 'react'
+
+function App() {
+  const [activeTab, setActiveTab] = useState('latest')
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Header 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+      />
+      
+      <main style={{ flex: 1 }}>
+        {activeTab === 'latest' ? <LatestNews /> : <TrendingNews />}
+      </main>
+      
+      <Footer />
+    </div>
+  )
+}
+```

@@ -1,0 +1,266 @@
+---
+title: 'Sui Helpers'
+description: 'Utility functions for Sui blockchain operations and transaction building'
+---
+
+## Overview
+
+The Sui helper utilities provide functions for currency conversion, transaction building, and validation. These utilities simplify interaction with the Sui blockchain and the TUNA smart contract.
+
+## Currency Conversion
+
+### suiToMist
+
+Convert SUI to MIST (1 SUI = 1,000,000,000 MIST).
+
+```typescript
+function suiToMist(sui: number): number
+```
+
+<ParamField path="sui" type="number" required>
+  Amount in SUI to convert
+</ParamField>
+
+**Returns:** `number` - Amount in MIST (floored to integer)
+
+**Example:**
+```typescript
+import { suiToMist } from '@/lib/sui';
+
+const mist = suiToMist(0.5); // 500000000
+const oneSui = suiToMist(1); // 1000000000
+```
+
+### mistToSui
+
+Convert MIST to SUI.
+
+```typescript
+function mistToSui(mist: number): number
+```
+
+<ParamField path="mist" type="number" required>
+  Amount in MIST to convert
+</ParamField>
+
+**Returns:** `number` - Amount in SUI
+
+**Example:**
+```typescript
+import { mistToSui } from '@/lib/sui';
+
+const sui = mistToSui(1000000000); // 1.0
+const smallAmount = mistToSui(500000); // 0.0005
+```
+
+### formatSui
+
+Format MIST amount for user-friendly display.
+
+```typescript
+function formatSui(mist: number): string
+```
+
+<ParamField path="mist" type="number" required>
+  Amount in MIST to format
+</ParamField>
+
+**Returns:** `string` - Formatted string with "SUI" suffix
+
+**Formatting Rules:**
+- < 0.001 SUI: displays "< 0.001 SUI"
+- < 1 SUI: displays with 3 decimal places
+- ≥ 1 SUI: displays with 2 decimal places
+
+**Example:**
+```typescript
+import { formatSui } from '@/lib/sui';
+
+formatSui(500000);         // "< 0.001 SUI"
+formatSui(1500000);        // "0.002 SUI"
+formatSui(500000000);      // "0.500 SUI"
+formatSui(1500000000);     // "1.50 SUI"
+```
+
+## Validation
+
+### isValidTipAmount
+
+Validate that a tip amount meets the minimum requirement.
+
+```typescript
+function isValidTipAmount(amount: number): boolean
+```
+
+<ParamField path="amount" type="number" required>
+  Tip amount in MIST to validate
+</ParamField>
+
+**Returns:** `boolean` - true if amount is valid, false otherwise
+
+<Note>
+  The minimum tip amount is defined in `CONSTANTS.MIN_TIP_AMOUNT` from the config.
+</Note>
+
+**Example:**
+```typescript
+import { isValidTipAmount, suiToMist } from '@/lib/sui';
+
+const amount = suiToMist(0.01);
+if (isValidTipAmount(amount)) {
+  // Proceed with tip
+}
+```
+
+## Transaction Builders
+
+### createTipArticleTransaction
+
+Create a transaction to tip an article author.
+
+```typescript
+function createTipArticleTransaction(
+  blobId: string,
+  amount: number
+): Transaction
+```
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  Tip amount in MIST
+</ParamField>
+
+**Returns:** `Transaction` - Sui transaction object ready to be signed
+
+**Implementation Details:**
+- Splits coins from gas for the tip
+- Calls `tip_article` on the TUNA smart contract
+- Passes registry object, blob ID, and tip coin
+
+**Example:**
+```typescript
+import { createTipArticleTransaction, suiToMist } from '@/lib/sui';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+
+const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+const tipArticle = async (blobId: string) => {
+  const amount = suiToMist(0.1); // 0.1 SUI tip
+  const tx = createTipArticleTransaction(blobId, amount);
+  
+  signAndExecute({
+    transaction: tx,
+  });
+};
+```
+
+### createPostCommentTransaction
+
+Create a transaction to post a short comment (≤280 characters).
+
+```typescript
+function createPostCommentTransaction(
+  blobId: string,
+  commentText: string
+): Transaction
+```
+
+<ParamField path="blobId" type="string" required>
+  The article blob ID to comment on
+</ParamField>
+
+<ParamField path="commentText" type="string" required>
+  Comment text (maximum 280 characters)
+</ParamField>
+
+**Returns:** `Transaction` - Sui transaction object
+
+<Note>
+  For comments longer than 280 characters, use `createPostCommentWithBlobTransaction` instead.
+</Note>
+
+### createPostCommentWithBlobTransaction
+
+Create a transaction to post a long comment or comment with media.
+
+```typescript
+function createPostCommentWithBlobTransaction(
+  blobId: string,
+  previewText: string,
+  contentBlobId: string,
+  commentType: 'text_long' | 'media'
+): Transaction
+```
+
+<ParamField path="blobId" type="string" required>
+  The article blob ID to comment on
+</ParamField>
+
+<ParamField path="previewText" type="string" required>
+  Preview text (maximum 280 characters) displayed in feeds
+</ParamField>
+
+<ParamField path="contentBlobId" type="string" required>
+  Walrus blob ID containing the full comment content
+</ParamField>
+
+<ParamField path="commentType" type="'text_long' | 'media'" required>
+  Type of comment: 'text_long' for long text, 'media' for comments with images
+</ParamField>
+
+**Returns:** `Transaction` - Sui transaction object
+
+### createTipCommentTransaction
+
+Create a transaction to tip a comment.
+
+```typescript
+function createTipCommentTransaction(
+  commentId: string,
+  amount: number
+): Transaction
+```
+
+<ParamField path="commentId" type="string" required>
+  The Sui object ID of the comment
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  Tip amount in MIST
+</ParamField>
+
+**Returns:** `Transaction` - Sui transaction object
+
+### createWithdrawCommentTipsTransaction
+
+Create a transaction to withdraw accumulated tips from a comment.
+
+```typescript
+function createWithdrawCommentTipsTransaction(
+  commentId: string
+): Transaction
+```
+
+<ParamField path="commentId" type="string" required>
+  The Sui object ID of the comment to withdraw tips from
+</ParamField>
+
+**Returns:** `Transaction` - Sui transaction object
+
+<Note>
+  Only the comment author can withdraw tips from their comments.
+</Note>
+
+## Source Reference
+
+All Sui helper functions are implemented in:
+```
+src/lib/sui.ts
+```
+
+They utilize configuration from:
+- `CONTRACT_CONFIG` - Package ID, module name, registry ID
+- `CONSTANTS` - Minimum tip amount and other constants

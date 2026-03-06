@@ -1,0 +1,321 @@
+---
+title: 'Formatting Utilities'
+description: 'Helper functions for formatting and displaying data in the TUNA application'
+---
+
+## Overview
+
+TUNA provides formatting utilities for displaying data in a user-friendly way. These utilities handle currency formatting, image URL proxying, and other display-related transformations.
+
+## Currency Formatting
+
+### formatSui
+
+Format MIST amounts into human-readable SUI values with appropriate precision.
+
+```typescript
+function formatSui(mist: number): string
+```
+
+<ParamField path="mist" type="number" required>
+  Amount in MIST (1 SUI = 1,000,000,000 MIST)
+</ParamField>
+
+**Returns:** `string` - Formatted string with "SUI" suffix
+
+### Formatting Logic
+
+The function applies different precision levels based on the amount:
+
+<ResponseField name="< 0.001 SUI" type="string">
+  Displays as `"< 0.001 SUI"` for very small amounts
+  
+  ```typescript
+  formatSui(500000);  // "< 0.001 SUI"
+  formatSui(1);       // "< 0.001 SUI"
+  ```
+</ResponseField>
+
+<ResponseField name="0.001 - 0.999 SUI" type="string">
+  Displays with 3 decimal places for amounts less than 1 SUI
+  
+  ```typescript
+  formatSui(1000000);      // "0.001 SUI"
+  formatSui(5000000);      // "0.005 SUI"
+  formatSui(500000000);    // "0.500 SUI"
+  ```
+</ResponseField>
+
+<ResponseField name="≥ 1 SUI" type="string">
+  Displays with 2 decimal places for amounts of 1 SUI or more
+  
+  ```typescript
+  formatSui(1000000000);   // "1.00 SUI"
+  formatSui(1500000000);   // "1.50 SUI"
+  formatSui(10000000000);  // "10.00 SUI"
+  ```
+</ResponseField>
+
+### Implementation
+
+```typescript
+export function formatSui(mist: number): string {
+  const sui = mistToSui(mist);
+  if (sui < 0.001) return '< 0.001 SUI';
+  if (sui < 1) return `${sui.toFixed(3)} SUI`;
+  return `${sui.toFixed(2)} SUI`;
+}
+```
+
+### Usage Examples
+
+<CodeGroup>
+
+```typescript React Component
+import { formatSui } from '@/lib/sui';
+
+function TipDisplay({ amount }: { amount: number }) {
+  return (
+    <div className="tip-amount">
+      {formatSui(amount)}
+    </div>
+  );
+}
+```
+
+```typescript Article Stats
+import { formatSui } from '@/lib/sui';
+
+function ArticleStats({ article }) {
+  return (
+    <div>
+      <p>Total tips: {formatSui(article.totalTips)}</p>
+      <p>Average tip: {formatSui(article.totalTips / article.tipCount)}</p>
+    </div>
+  );
+}
+```
+
+```typescript Tip Input Validation
+import { formatSui, suiToMist } from '@/lib/sui';
+
+function TipButton() {
+  const [tipSui, setTipSui] = useState(0.1);
+  const tipMist = suiToMist(tipSui);
+  
+  return (
+    <button>
+      Tip {formatSui(tipMist)}
+    </button>
+  );
+}
+```
+
+</CodeGroup>
+
+## Image Utilities
+
+### getProxiedImageUrl
+
+Generate a proxied image URL to bypass CORS and COEP restrictions using wsrv.nl.
+
+```typescript
+function getProxiedImageUrl(
+  url: string,
+  width?: number
+): string
+```
+
+<ParamField path="url" type="string" required>
+  Original image URL to proxy
+</ParamField>
+
+<ParamField path="width" type="number" default={800}>
+  Optional width to resize the image to (optimization)
+</ParamField>
+
+**Returns:** `string` - Proxied URL with CORS headers
+
+### Smart Proxying Logic
+
+The function intelligently determines when to proxy:
+
+<ResponseField name="Data URLs" type="no proxy">
+  URLs starting with `data:` are returned as-is
+  
+  ```typescript
+  getProxiedImageUrl('data:image/png;base64,...') 
+  // Returns original data URL
+  ```
+</ResponseField>
+
+<ResponseField name="Local Assets" type="no proxy">
+  URLs starting with `/` or `blob:` are returned unchanged
+  
+  ```typescript
+  getProxiedImageUrl('/images/logo.png')
+  // Returns: "/images/logo.png"
+  
+  getProxiedImageUrl('blob:http://localhost/...')
+  // Returns original blob URL
+  ```
+</ResponseField>
+
+<ResponseField name="Already Proxied" type="no proxy">
+  URLs containing `wsrv.nl` are not double-proxied
+  
+  ```typescript
+  getProxiedImageUrl('https://wsrv.nl/?url=...')
+  // Returns original URL
+  ```
+</ResponseField>
+
+<ResponseField name="External URLs" type="proxied">
+  Remote URLs are proxied through wsrv.nl with optimization
+  
+  ```typescript
+  getProxiedImageUrl('https://example.com/image.jpg', 800)
+  // Returns: "https://wsrv.nl/?url=https%3A%2F%2Fexample.com%2Fimage.jpg&w=800&output=webp"
+  ```
+</ResponseField>
+
+### Implementation Details
+
+```typescript
+export function getProxiedImageUrl(url: string, width: number = 800): string {
+  if (!url) return '';
+  
+  // Don't proxy data URLs or local assets
+  if (url.startsWith('data:') || url.startsWith('/') || url.startsWith('blob:')) {
+    return url;
+  }
+  
+  // Already proxied?
+  if (url.includes('wsrv.nl')) {
+    return url;
+  }
+  
+  // Encode the URL safely
+  const encodedUrl = encodeURIComponent(url);
+  
+  // Use wsrv.nl with output=webp for better performance and n=-1 to allow all images
+  return `https://wsrv.nl/?url=${encodedUrl}&w=${width}&output=webp`;
+}
+```
+
+### Why Use Image Proxying?
+
+<Note>
+  **CORS Headers:** The wsrv.nl proxy service adds proper CORS headers, allowing images to be used in canvas operations and with strict security policies.
+</Note>
+
+<Note>
+  **Format Conversion:** Images are automatically converted to WebP format for better performance and smaller file sizes.
+</Note>
+
+<Note>
+  **Resize Optimization:** Specifying a width parameter resizes images server-side, reducing bandwidth and improving load times.
+</Note>
+
+### Usage Examples
+
+<CodeGroup>
+
+```typescript Article Cover Image
+import { getProxiedImageUrl } from '@/lib/utils';
+import { getWalrusUrl } from '@/lib/walrus';
+
+function ArticleCover({ coverImageBlobId }) {
+  const walrusUrl = getWalrusUrl(coverImageBlobId);
+  const proxiedUrl = getProxiedImageUrl(walrusUrl, 1200);
+  
+  return (
+    <img 
+      src={proxiedUrl} 
+      alt="Article cover"
+      className="w-full h-auto"
+    />
+  );
+}
+```
+
+```typescript User Avatar
+import { getProxiedImageUrl } from '@/lib/utils';
+
+function UserAvatar({ avatarUrl }) {
+  // Smaller width for avatars
+  const proxiedUrl = getProxiedImageUrl(avatarUrl, 200);
+  
+  return (
+    <img 
+      src={proxiedUrl}
+      alt="User avatar"
+      className="w-10 h-10 rounded-full"
+    />
+  );
+}
+```
+
+```typescript Gallery Thumbnails
+import { getProxiedImageUrl } from '@/lib/utils';
+
+function ImageGallery({ images }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {images.map((imageUrl, i) => (
+        <img 
+          key={i}
+          src={getProxiedImageUrl(imageUrl, 400)}
+          alt={`Image ${i + 1}`}
+          className="w-full h-auto"
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+## Best Practices
+
+### Currency Display
+
+<Note>
+  **Consistency:** Always use `formatSui()` for displaying amounts to users. Don't format MIST values manually to ensure consistent precision across the application.
+</Note>
+
+<Note>
+  **Input vs Display:** Store and process amounts in MIST (integer), but display them using `formatSui()` for better UX.
+</Note>
+
+### Image Proxying
+
+<Note>
+  **Width Optimization:** Choose appropriate width values based on the display context. Smaller widths for thumbnails and avatars, larger widths for hero images.
+</Note>
+
+<Note>
+  **Walrus Integration:** Always proxy Walrus URLs for external images to ensure CORS compatibility and optimize delivery.
+</Note>
+
+## Source Reference
+
+Formatting utilities are implemented across multiple files:
+
+**Currency formatting:**
+```
+src/lib/sui.ts:152-157
+```
+
+**Image utilities:**
+```
+src/lib/utils.ts:1-28
+```
+
+## Related Functions
+
+See also:
+- [suiToMist](/utils/sui-helpers#suitomist) - Convert SUI to MIST
+- [mistToSui](/utils/sui-helpers#misttosui) - Convert MIST to SUI
+- [getWalrusUrl](/utils/walrus-helpers#getwalrusurl) - Get Walrus blob URLs

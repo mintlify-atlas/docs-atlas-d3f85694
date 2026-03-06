@@ -1,0 +1,442 @@
+---
+title: NewsRegistry Smart Contract
+description: Understanding TUNA's on-chain news index - how articles are registered, engagement is tracked, and permissions are managed
+---
+
+## Overview
+
+The **NewsRegistry** is a Sui Move smart contract that serves as the decentralized index for all news articles in TUNA. It's deployed as a **Shared Object**, making it accessible to all users for reading and writing.
+
+<Info>
+**Contract Address (Sui Testnet)**
+- Package: `0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66`
+- Registry Object: `0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d`
+- Module: `news_registry`
+</Info>
+
+## Registry Structure
+
+The NewsRegistry is a Move struct with the following fields:
+
+```move
+struct NewsRegistry has key {
+  id: UID,
+  latest_blobs: vector<String>,
+  engagement_map: VecMap<String, ArticleEngagement>,
+  admin_cap: ID,
+}
+```
+
+<Accordion title="Field Explanations">
+  - **`id`**: Unique identifier for the Sui object
+  - **`latest_blobs`**: Vector (array) of Walrus blob IDs, ordered chronologically
+  - **`engagement_map`**: Maps blob IDs to their engagement statistics
+  - **`admin_cap`**: Reference to the AdminCap object that controls registry updates
+</Accordion>
+
+## Article Storage
+
+### Blob ID Array
+
+Articles are indexed as Walrus blob IDs in the `latest_blobs` vector:
+
+```typescript
+// Fetching from Sui
+const registry = await suiClient.getObject({
+  id: REGISTRY_ID,
+  options: { showContent: true }
+});
+
+const fields = registry.data.content.fields as any;
+const allBlobIds = fields.latest_blobs as string[];
+
+// Example blob IDs:
+// [
+//   "Cjk7S3b6pLWqZ8vYx3KjHdR2Uw9eFgT8mNpQ1aBc4D",
+//   "9xTmK7qR3wYz2sLvN4jHdP8uF6gE1bA5cX0oI9rV7",
+//   "5wQpL2tF9xYv3jKm8hD1rE7gS4nU6bC0aI9oX5zT2",
+//   ...
+// ]
+```
+
+### Chronological Ordering
+
+Articles are appended to the vector, so:
+- **First items** = Oldest articles
+- **Last items** = Newest articles
+
+```typescript
+// Get 20 most recent articles
+const recentBlobs = allBlobIds.slice(-20).reverse();
+
+// Get articles 100-80 (20 articles before the most recent 80)
+const olderBlobs = allBlobIds.slice(-100, -80);
+
+// Total article count
+const totalArticles = allBlobIds.length;
+```
+
+<Note>
+The registry only stores **blob IDs** (pointers), not the actual article content. Content is fetched from Walrus using these IDs.
+</Note>
+
+## Engagement Tracking
+
+### ArticleEngagement Structure
+
+Each article has associated engagement metrics:
+
+```move
+struct ArticleEngagement has store {
+  total_tips: u64,      // Total SUI tipped (in MIST)
+  tip_count: u64,       // Number of tips received
+  comment_count: u64,   // Number of comments
+}
+```
+
+### Fetching Engagement Data
+
+The `engagement_map` uses a VecMap structure:
+
+```typescript
+async function getArticleEngagement(blobId: string) {
+  const registry = await suiClient.getObject({
+    id: CONTRACT_CONFIG.REGISTRY_ID,
+    options: { showContent: true },
+  });
+  
+  const fields = registry.data.content.fields as any;
+  const engagementMap = fields.engagement_map as any;
+  
+  // VecMap format: { contents: [{ key: string, value: object }] }
+  const engagement = engagementMap.contents?.find(
+    (item: any) => item.key === blobId
+  );
+  
+  if (!engagement) {
+    return { totalTips: 0, tipCount: 0, commentCount: 0 };
+  }
+  
+  return {
+    totalTips: parseInt(engagement.value.total_tips || '0'),
+    tipCount: parseInt(engagement.value.tip_count || '0'),
+    commentCount: parseInt(engagement.value.comment_count || '0'),
+  };
+}
+```
+
+### Combined Article Data
+
+TUNA's `useLatestNews` hook merges registry data with Walrus content:
+
+```typescript
+export function useLatestNews(limit: number = 100) {
+  return useQuery({
+    queryKey: ['latestNews', limit],
+    queryFn: async () => {
+      // 1. Get blob IDs from registry
+      const registry = await suiClient.getObject(/*...*/);
+      const blobIds = fields.latest_blobs.slice(-limit).reverse();
+      
+      // 2. Fetch content and engagement in parallel
+      const articles = await Promise.all(
+        blobIds.map(async (blobId) => {
+          const walrusContent = await fetchFromWalrus(blobId);
+          const engagement = await getArticleEngagement(blobId);
+          
+          return {
+            id: blobId,
+            blob_id: blobId,
+            title: walrusContent.title,
+            content: walrusContent.content,
+            summary: walrusContent.summary,
+            url: walrusContent.url,
+            image: walrusContent.image,
+            author: walrusContent.author,
+            source: walrusContent.source,
+            timestamp: walrusContent.timestamp,
+            // Engagement data
+            totalTips: engagement.totalTips,
+            tipCount: engagement.tipCount,
+            commentCount: engagement.commentCount,
+          };
+        })
+      );
+      
+      return articles.filter(a => a !== null);
+    },
+  });
+}
+```
+
+## Contract Functions
+
+The NewsRegistry module exposes several public functions:
+
+### 1. Tip Article
+
+```move
+public entry fun tip_article(
+  registry: &mut NewsRegistry,
+  blob_id: String,
+  tip: Coin<SUI>,
+  ctx: &mut TxContext
+)
+```
+
+**Purpose**: Tip an article, incrementing its engagement stats
+
+**TypeScript Usage**:
+```typescript
+import { createTipArticleTransaction, suiToMist } from '../lib/sui';
+
+const tx = createTipArticleTransaction(
+  blobId,
+  suiToMist(0.1) // 0.1 SUI
+);
+
+const result = await signAndExecuteTransaction({ transaction: tx });
+```
+
+### 2. Post Comment
+
+```move
+public entry fun post_comment(
+  registry: &mut NewsRegistry,
+  blob_id: String,
+  comment_text: String,
+  ctx: &mut TxContext
+)
+```
+
+**Purpose**: Post a short comment (≤280 chars) on an article
+
+**TypeScript Usage**:
+```typescript
+import { createPostCommentTransaction } from '../lib/sui';
+
+const tx = createPostCommentTransaction(
+  blobId,
+  "Great article! Very informative."
+);
+
+const result = await signAndExecuteTransaction({ transaction: tx });
+```
+
+### 3. Post Comment with Blob
+
+```move
+public entry fun post_comment_with_blob(
+  registry: &mut NewsRegistry,
+  blob_id: String,
+  preview_text: String,
+  content_blob_id: String,
+  comment_type: String,
+  ctx: &mut TxContext
+)
+```
+
+**Purpose**: Post a long comment or comment with media
+
+**TypeScript Usage**:
+```typescript
+import { createPostCommentWithBlobTransaction } from '../lib/sui';
+import { uploadToWalrus } from '../lib/walrus';
+
+// Upload full content to Walrus
+const fullContent = {
+  text: longCommentText,
+  media: [{ type: 'image', url: imageUrl }],
+  timestamp: Date.now(),
+};
+const contentBlobId = await uploadToWalrus(fullContent);
+
+// Post comment with preview
+const tx = createPostCommentWithBlobTransaction(
+  blobId,
+  previewText.slice(0, 280),
+  contentBlobId,
+  'media' // or 'text_long'
+);
+
+const result = await signAndExecuteTransaction({ transaction: tx });
+```
+
+### 4. Tip Comment
+
+```move
+public entry fun tip_comment(
+  comment: &mut Comment,
+  tip: Coin<SUI>,
+  ctx: &mut TxContext
+)
+```
+
+**Purpose**: Tip a specific comment
+
+**TypeScript Usage**:
+```typescript
+import { createTipCommentTransaction, suiToMist } from '../lib/sui';
+
+const tx = createTipCommentTransaction(
+  commentId, // Object ID of the comment
+  suiToMist(0.05)
+);
+
+const result = await signAndExecuteTransaction({ transaction: tx });
+```
+
+### 5. Withdraw Comment Tips
+
+```move
+public entry fun withdraw_comment_tips(
+  comment: &mut Comment,
+  ctx: &mut TxContext
+)
+```
+
+**Purpose**: Withdraw accumulated tips from a comment (author only)
+
+**TypeScript Usage**:
+```typescript
+import { createWithdrawCommentTipsTransaction } from '../lib/sui';
+
+const tx = createWithdrawCommentTipsTransaction(commentId);
+
+const result = await signAndExecuteTransaction({ transaction: tx });
+```
+
+## Comment Objects
+
+Comments are created as individual Sui objects:
+
+```move
+struct Comment has key, store {
+  id: UID,
+  blob_id: String,           // Article blob ID
+  author: address,           // Comment author
+  preview_text: String,      // Short text (≤280 chars)
+  content_blob_id: Option<String>,  // Full content on Walrus
+  comment_type: String,      // "text", "text_long", or "media"
+  timestamp: u64,
+  tips_received: Balance<SUI>,  // Accumulated tips
+}
+```
+
+<Info>
+Comments are **owned objects** transferred to the author, allowing them to withdraw tips independently.
+</Info>
+
+## Admin Capabilities
+
+The registry is controlled by an AdminCap:
+
+```move
+struct AdminCap has key {
+  id: UID,
+}
+```
+
+**Admin-only functions** (not exposed in TUNA frontend):
+- Adding new articles to the registry
+- Removing articles (moderation)
+- Updating registry configuration
+
+<Warning>
+The AdminCap object ID is `0x18d48d74bfddffbe3dc75025136722380f374baec942df2e0aef76cad1061496` on testnet. Only the holder can perform admin operations.
+</Warning>
+
+## Data Flow Summary
+
+<Steps>
+  <Step title="Article Creation">
+    Admin uploads content to Walrus, then adds blob ID to registry
+  </Step>
+  
+  <Step title="User Reads">
+    Query registry for blob IDs → Fetch content from Walrus → Display articles
+  </Step>
+  
+  <Step title="User Tips">
+    Execute tip transaction → Registry updates engagement_map → Tips sent to admin
+  </Step>
+  
+  <Step title="User Comments">
+    Upload comment to Walrus (if long/media) → Execute comment transaction → Comment object created → Registry increments comment_count
+  </Step>
+  
+  <Step title="Tip Comment">
+    Execute tip transaction on Comment object → Tips accumulate in comment.tips_received
+  </Step>
+  
+  <Step title="Withdraw">
+    Comment author executes withdraw transaction → Tips transferred to author
+  </Step>
+</Steps>
+
+## Constants and Limits
+
+```typescript
+export const CONSTANTS = {
+  SHORT_COMMENT_THRESHOLD: 280,        // Max chars for on-chain comments
+  MIN_TIP_AMOUNT: 1_000_000,          // 0.001 SUI in MIST
+  MAX_PREVIEW_LENGTH: 280,            // Max preview length
+};
+```
+
+<Note>
+The 280-character limit mirrors Twitter's original limit, making comments concise and gas-efficient.
+</Note>
+
+## Querying the Registry
+
+### Basic Query
+
+```typescript
+import { SuiClient } from '@mysten/sui.js/client';
+import { CONTRACT_CONFIG } from '../config';
+
+const client = new SuiClient({ 
+  url: 'https://fullnode.testnet.sui.io:443' 
+});
+
+const registry = await client.getObject({
+  id: CONTRACT_CONFIG.REGISTRY_ID,
+  options: { showContent: true }
+});
+
+console.log(registry.data?.content);
+```
+
+### Filtering Articles
+
+```typescript
+// Get articles from last 24 hours
+const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+const recentArticles = articles.filter(a => a.timestamp > oneDayAgo);
+
+// Get articles by source
+const twitterArticles = articles.filter(a => a.source === 'twitter');
+
+// Get most tipped articles
+const topTipped = articles
+  .sort((a, b) => b.totalTips - a.totalTips)
+  .slice(0, 10);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    See the big picture
+  </Card>
+  <Card title="Sui Integration" icon="link" href="/concepts/sui-integration">
+    Learn transaction building
+  </Card>
+  <Card title="Walrus Storage" icon="database" href="/concepts/walrus-storage">
+    Understand content storage
+  </Card>
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Build with TUNA
+  </Card>
+</CardGroup>

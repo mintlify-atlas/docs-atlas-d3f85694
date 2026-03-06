@@ -1,0 +1,426 @@
+---
+title: Walrus Decentralized Storage
+description: How TUNA uses Walrus for censorship-resistant, permanent content storage with blob IDs and aggregator endpoints
+---
+
+## Overview
+
+**Walrus** is a decentralized storage network that provides permanent, immutable blob storage. TUNA stores all article content, comments, and media on Walrus, using the Sui blockchain only as an index.
+
+<Info>
+**Key Benefit**: Storing data on Walrus is significantly cheaper than storing it directly on-chain, while maintaining decentralization and permanence.
+</Info>
+
+## Walrus Architecture
+
+Walrus has two main components:
+
+<CardGroup cols={2}>
+  <Card title="Publishers" icon="upload">
+    Accept data uploads via HTTP PUT requests and return blob IDs
+  </Card>
+  <Card title="Aggregators" icon="download">
+    Serve blob data via HTTP GET requests using blob IDs
+  </Card>
+</CardGroup>
+
+## Publisher Endpoints
+
+TUNA uses multiple publisher endpoints for redundancy:
+
+```typescript
+const WALRUS_PUBLISHERS = [
+  'https://walrus-testnet-publisher.nodes.guru/v1/blobs',
+  'https://walrus-testnet-publisher.stakely.io/v1/blobs',
+  'https://publisher.walrus-testnet.walrus.space/v1/blobs',
+  'https://walrus-testnet-publisher.everstake.one/v1/blobs',
+  'https://walrus-testnet-publisher.chainbase.online/v1/blobs',
+  'https://publisher.testnet.walrus.atalma.io/v1/blobs',
+];
+```
+
+<Warning>
+These are **testnet** endpoints. Production applications should use Walrus mainnet endpoints.
+</Warning>
+
+## Uploading Content
+
+### Uploading JSON Data
+
+The `uploadToWalrus()` function handles article and comment uploads:
+
+```typescript
+import { uploadToWalrus } from '../lib/walrus';
+
+const article = {
+  title: "Understanding Sui Move",
+  content: "<p>Sui Move is...</p>",
+  summary: "An introduction to Sui's Move language",
+  source: "rss",
+  url: "https://example.com/article",
+  image: "https://example.com/image.jpg",
+  timestamp: Date.now(),
+};
+
+try {
+  const blobId = await uploadToWalrus(article);
+  console.log(`Uploaded to Walrus: ${blobId}`);
+  // Now store blobId in Sui registry
+} catch (error) {
+  console.error('Upload failed:', error);
+}
+```
+
+**Implementation with fallback logic:**
+
+```typescript
+export async function uploadToWalrus(
+  content: WalrusArticleContent | WalrusCommentContent
+): Promise<string> {
+  const body = JSON.stringify(content);
+  
+  // Try each publisher endpoint
+  for (const publisherBase of WALRUS_PUBLISHERS) {
+    try {
+      // Walrus requires epochs parameter (storage duration)
+      const publisherUrl = `${publisherBase}?epochs=30`;
+      
+      const response = await fetch(publisherUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Extract blob ID from response
+      const blobId = 
+        data.newlyCreated?.blobObject?.blobId ||
+        data.alreadyCertified?.blobId ||
+        data.blobObject?.blobId;
+      
+      if (!blobId) {
+        throw new Error('Could not retrieve Blob ID');
+      }
+      
+      return blobId;
+    } catch (error) {
+      console.warn(`Failed to upload to ${publisherBase}`, error);
+      // Continue to next publisher
+    }
+  }
+  
+  throw new Error('Walrus upload failed on all publishers');
+}
+```
+
+<Note>
+**Epochs Parameter**: `?epochs=30` specifies that the blob should be stored for 30 epochs. On testnet, this is typically ~30 days.
+</Note>
+
+### Walrus Response Format
+
+Walrus can return different response structures:
+
+```typescript
+// New blob (first time upload)
+{
+  "newlyCreated": {
+    "blobObject": {
+      "blobId": "Cjk7S3b6pLW...",
+      "size": 1234,
+      "encodingType": "RedStuff",
+      "certifiedEpoch": 100
+    }
+  }
+}
+
+// Already exists
+{
+  "alreadyCertified": {
+    "blobId": "Cjk7S3b6pLW...",
+    "size": 1234,
+    "certifiedEpoch": 98
+  }
+}
+```
+
+## Uploading Binary Files (Images)
+
+For images and other binary data, use `uploadImageToWalrus()`:
+
+```typescript
+import { uploadImageToWalrus } from '../lib/walrus';
+
+// From file input
+const fileInput = document.querySelector('input[type="file"]');
+const file = fileInput.files[0];
+
+try {
+  const imageBlobId = await uploadImageToWalrus(file);
+  console.log(`Image uploaded: ${imageBlobId}`);
+  
+  // Store in article content
+  const article = {
+    title: "My Article",
+    content: "...",
+    image: getWalrusUrl(imageBlobId), // Full URL
+    timestamp: Date.now(),
+  };
+  
+  const articleBlobId = await uploadToWalrus(article);
+} catch (error) {
+  console.error('Image upload failed:', error);
+}
+```
+
+**Implementation:**
+
+```typescript
+export async function uploadImageToWalrus(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  
+  for (const publisherBase of WALRUS_PUBLISHERS) {
+    try {
+      const publisherUrl = `${publisherBase}?epochs=30`;
+      
+      const response = await fetch(publisherUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: arrayBuffer,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const blobId = 
+        data.newlyCreated?.blobObject?.blobId ||
+        data.alreadyCertified?.blobId ||
+        data.blobObject?.blobId;
+      
+      if (!blobId) {
+        throw new Error('Could not retrieve Blob ID');
+      }
+      
+      return blobId;
+    } catch (error) {
+      // Try next publisher
+    }
+  }
+  
+  throw new Error('Image upload failed on all publishers');
+}
+```
+
+## Fetching Content
+
+### Aggregator Endpoints
+
+TUNA uses multiple aggregator endpoints for redundancy:
+
+```typescript
+const WALRUS_AGGREGATORS = [
+  'https://walrus-testnet-aggregator.nodes.guru/v1/blobs',
+  'https://walrus-testnet-aggregator.stakely.io/v1/blobs',
+  'https://aggregator.walrus-testnet.walrus.space/v1/blobs',
+  'https://walrus-testnet-aggregator.everstake.one/v1/blobs',
+  'https://walrus-testnet-aggregator.chainbase.online/v1/blobs',
+  'https://aggregator.testnet.walrus.atalma.io/v1/blobs',
+];
+```
+
+### Fetching JSON Blobs
+
+```typescript
+import { fetchFromWalrus } from '../lib/walrus';
+
+try {
+  const article = await fetchFromWalrus<WalrusArticleContent>(blobId);
+  console.log(`Title: ${article.title}`);
+  console.log(`Content: ${article.content}`);
+} catch (error) {
+  console.error('Failed to fetch article:', error);
+}
+```
+
+**Implementation with fallback:**
+
+```typescript
+export async function fetchFromWalrus<T = any>(blobId: string): Promise<T> {
+  // Validate blob ID format
+  if (!blobId || blobId.length < 30 || blobId.includes(' ')) {
+    throw new Error(`Invalid blob ID: ${blobId}`);
+  }
+  
+  // Try each aggregator endpoint
+  for (const aggregatorBase of WALRUS_AGGREGATORS) {
+    try {
+      const aggregatorUrl = `${aggregatorBase}/${blobId}`;
+      const response = await fetch(aggregatorUrl);
+      
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      // Continue to next aggregator
+    }
+  }
+  
+  throw new Error(`Could not retrieve blob ${blobId}`);
+}
+```
+
+<Info>
+The `fetchFromWalrus` function automatically tries all 6 aggregators until one succeeds, providing high availability.
+</Info>
+
+### Generating Public URLs
+
+For direct linking (e.g., in `<img>` tags):
+
+```typescript
+import { getWalrusUrl } from '../lib/walrus';
+
+const imageUrl = getWalrusUrl(imageBlobId);
+// "https://aggregator.walrus-testnet.walrus.space/v1/blobs/Cjk7S3b6pLW..."
+
+// Use in React component
+<img src={imageUrl} alt="Article cover" />
+```
+
+## Blob ID Format
+
+Walrus blob IDs are:
+- **Base64url** encoded
+- Typically **43-44 characters** long
+- Represent **32 bytes** of data
+- **Content-addressed** (same content = same ID)
+
+```typescript
+// Valid blob ID examples
+"Cjk7S3b6pLWqZ8vYx3KjHdR2Uw9eFgT8mNpQ1aBc4D"
+"9xTmK7qR3wYz2sLvN4jHdP8uF6gE1bA5cX0oI9rV7"
+
+// Invalid blob IDs
+"blob_id"           // Too short
+"test 123"          // Contains spaces
+""                  // Empty string
+```
+
+## Content Types
+
+### Article Content Structure
+
+```typescript
+interface WalrusArticleContent {
+  title: string;           // Required
+  content: string;         // HTML string
+  summary?: string;        // Short description
+  source: string;          // "twitter", "rss", "onchain"
+  url?: string;            // Original source URL
+  image?: string;          // Cover image URL or blob ID
+  author?: string;         // Author name
+  timestamp: number;       // Unix timestamp in ms
+}
+```
+
+### Comment Content Structure
+
+```typescript
+interface WalrusCommentContent {
+  text: string;            // Comment text
+  media?: Array<{          // Optional media attachments
+    type: 'image' | 'video';
+    url: string;           // Walrus URL or external URL
+    caption?: string;
+  }>;
+  timestamp: number;       // Unix timestamp in ms
+}
+```
+
+## Storage Duration
+
+Walrus storage is **epoch-based**:
+
+- Storage duration specified in `epochs` parameter
+- TUNA uses `epochs=30` (approximately 30 days on testnet)
+- After expiration, blobs may be deleted
+- For permanent storage, implement re-upload logic before expiration
+
+<Warning>
+**Testnet Limitation**: Testnet blobs may be periodically cleared. For production, use Walrus mainnet with longer epochs.
+</Warning>
+
+## Error Handling
+
+Both upload and fetch functions include comprehensive error handling:
+
+```typescript
+try {
+  const blobId = await uploadToWalrus(content);
+  // Success
+} catch (error) {
+  if (error.message.includes('all publishers')) {
+    // All publishers failed - network issue or Walrus outage
+    console.error('Walrus network unavailable');
+  } else {
+    // Individual publisher failed, but others may work
+    console.error('Upload error:', error);
+  }
+}
+
+try {
+  const content = await fetchFromWalrus(blobId);
+  // Success
+} catch (error) {
+  if (error.message.includes('Invalid blob ID')) {
+    // Blob ID format is wrong
+    console.error('Bad blob ID format');
+  } else if (error.message.includes('Could not retrieve')) {
+    // All aggregators failed
+    console.error('Blob not found or network issue');
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Validate Before Upload" icon="check">
+    Ensure content meets size limits and format requirements before uploading
+  </Card>
+  
+  <Card title="Cache Blob IDs" icon="database">
+    Store blob IDs in your app state to avoid redundant uploads
+  </Card>
+  
+  <Card title="Handle Failures Gracefully" icon="triangle-exclamation">
+    Implement retry logic and show user-friendly error messages
+  </Card>
+  
+  <Card title="Monitor Epochs" icon="clock">
+    Track blob expiration and re-upload important content before it expires
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sui Integration" icon="link" href="/concepts/sui-integration">
+    Learn how blob IDs are indexed on Sui
+  </Card>
+  <Card title="NewsRegistry Contract" icon="file-contract" href="/concepts/news-registry">
+    Understand the on-chain index
+  </Card>
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Start building with TUNA
+  </Card>
+</CardGroup>

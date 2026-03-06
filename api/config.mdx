@@ -1,0 +1,262 @@
+---
+title: "Configuration"
+description: "Configuration constants and settings for TUNA"
+---
+
+## Overview
+
+TUNA provides pre-configured constants for contract addresses, network settings, and application parameters. These values can be overridden using environment variables.
+
+## CONTRACT_CONFIG
+
+Sui smart contract configuration.
+
+```typescript
+const CONTRACT_CONFIG = {
+  PACKAGE_ID: string;
+  REGISTRY_ID: string;
+  ADMIN_CAP_ID: string;
+  MODULE_NAME: 'news_registry';
+} as const;
+```
+
+<ResponseField name="PACKAGE_ID" type="string">
+  The Sui package ID containing the TUNA smart contracts
+  
+  **Default**: `0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66`
+  
+  **Environment Variable**: `VITE_PACKAGE_ID`
+</ResponseField>
+
+<ResponseField name="REGISTRY_ID" type="string">
+  The shared object ID for the news registry
+  
+  **Default**: `0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d`
+  
+  **Environment Variable**: `VITE_REGISTRY_ID`
+</ResponseField>
+
+<ResponseField name="ADMIN_CAP_ID" type="string">
+  The admin capability object ID
+  
+  **Default**: `0x18d48d74bfddffbe3dc75025136722380f374baec942df2e0aef76cad1061496`
+  
+  **Environment Variable**: `VITE_ADMIN_CAP_ID`
+</ResponseField>
+
+<ResponseField name="MODULE_NAME" type="'news_registry'">
+  The Move module name (constant)
+</ResponseField>
+
+### Usage
+
+```typescript
+import { CONTRACT_CONFIG } from '@/config';
+
+const target = `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::tip_article`;
+```
+
+---
+
+## NETWORK_CONFIG
+
+Sui network configuration.
+
+```typescript
+const NETWORK_CONFIG = {
+  NETWORK: 'testnet' | 'mainnet' | 'devnet';
+  RPC_URL: string;
+} as const;
+```
+
+<ResponseField name="NETWORK" type="'testnet' | 'mainnet' | 'devnet'">
+  The Sui network to connect to
+  
+  **Default**: `testnet`
+  
+  **Environment Variable**: `VITE_SUI_NETWORK`
+</ResponseField>
+
+<ResponseField name="RPC_URL" type="string">
+  The RPC endpoint URL
+  
+  **Default**: `https://fullnode.testnet.sui.io:443`
+  
+  **Environment Variable**: `VITE_SUI_RPC_URL`
+</ResponseField>
+
+### Usage
+
+```typescript
+import { NETWORK_CONFIG } from '@/config';
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+
+const client = new SuiClient({ url: NETWORK_CONFIG.RPC_URL });
+```
+
+---
+
+## WALRUS_CONFIG
+
+Walrus storage configuration.
+
+```typescript
+const WALRUS_CONFIG = {
+  PUBLISHER_URL: string;
+  AGGREGATOR_URL: string;
+} as const;
+```
+
+<ResponseField name="PUBLISHER_URL" type="string">
+  Walrus publisher endpoint for uploading content
+  
+  **Default**: `https://publisher.walrus-testnet.walrus.space/v1/store`
+  
+  **Environment Variable**: `VITE_WALRUS_PUBLISHER_URL`
+</ResponseField>
+
+<ResponseField name="AGGREGATOR_URL" type="string">
+  Walrus aggregator endpoint for fetching content
+  
+  **Default**: `https://aggregator.walrus-testnet.walrus.space/v1`
+  
+  **Environment Variable**: `VITE_WALRUS_AGGREGATOR_URL`
+</ResponseField>
+
+<Note>
+  The Walrus library functions use multiple fallback endpoints automatically. These config values are provided for reference but may not be directly used by the library.
+</Note>
+
+---
+
+## CATEGORIES
+
+Available article categories.
+
+```typescript
+const CATEGORIES = [
+  'DeFi',
+  'Gaming',
+  'NFT',
+  'Dev',
+  'Governance',
+  'General',
+] as const;
+
+type Category = typeof CATEGORIES[number];
+```
+
+### Categories
+
+- **DeFi** - Decentralized Finance
+- **Gaming** - Blockchain Gaming
+- **NFT** - Non-Fungible Tokens
+- **Dev** - Development & Technical
+- **Governance** - Protocol Governance
+- **General** - General News
+
+### Usage
+
+```typescript
+import { CATEGORIES, type Category } from '@/config';
+
+function isValidCategory(category: string): category is Category {
+  return CATEGORIES.includes(category as Category);
+}
+```
+
+---
+
+## COMMENT_TYPES
+
+Comment type constants.
+
+```typescript
+const COMMENT_TYPES = {
+  TEXT: 'text',
+  TEXT_LONG: 'text_long',
+  MEDIA: 'media',
+} as const;
+
+type CommentType = typeof COMMENT_TYPES[keyof typeof COMMENT_TYPES];
+```
+
+<ResponseField name="TEXT" type="'text'">
+  Short text comment (≤280 characters)
+</ResponseField>
+
+<ResponseField name="TEXT_LONG" type="'text_long'">
+  Long text comment stored in Walrus
+</ResponseField>
+
+<ResponseField name="MEDIA" type="'media'">
+  Comment with media attachments (images/videos)
+</ResponseField>
+
+---
+
+## CONSTANTS
+
+Application constants.
+
+```typescript
+const CONSTANTS = {
+  SHORT_COMMENT_THRESHOLD: 280;
+  MIN_TIP_AMOUNT: 1_000_000;
+  MAX_PREVIEW_LENGTH: 280;
+} as const;
+```
+
+<ResponseField name="SHORT_COMMENT_THRESHOLD" type="280">
+  Maximum character length for short text comments
+  
+  Comments longer than this must be stored in Walrus as `text_long` type
+</ResponseField>
+
+<ResponseField name="MIN_TIP_AMOUNT" type="1_000_000">
+  Minimum tip amount in MIST
+  
+  Equals 0.001 SUI (1 SUI = 1,000,000,000 MIST)
+</ResponseField>
+
+<ResponseField name="MAX_PREVIEW_LENGTH" type="280">
+  Maximum length for comment preview text
+</ResponseField>
+
+### Usage Example
+
+```typescript
+import { CONSTANTS } from '@/config';
+
+function validateComment(text: string) {
+  if (text.length <= CONSTANTS.SHORT_COMMENT_THRESHOLD) {
+    return { type: 'text', needsWalrus: false };
+  }
+  return { type: 'text_long', needsWalrus: true };
+}
+
+function validateTip(amount: number) {
+  return amount >= CONSTANTS.MIN_TIP_AMOUNT;
+}
+```
+
+---
+
+## Environment Variables
+
+All configuration values can be overridden using environment variables in your `.env` file:
+
+```bash
+# Contract Configuration
+VITE_PACKAGE_ID=0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66
+VITE_REGISTRY_ID=0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d
+VITE_ADMIN_CAP_ID=0x18d48d74bfddffbe3dc75025136722380f374baec942df2e0aef76cad1061496
+
+# Network Configuration
+VITE_SUI_NETWORK=testnet
+VITE_SUI_RPC_URL=https://fullnode.testnet.sui.io:443
+
+# Walrus Configuration
+VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space/v1/store
+VITE_WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space/v1
+```

@@ -1,0 +1,326 @@
+---
+title: Sui Blockchain Integration
+description: How TUNA leverages Sui's object model, Shared Objects, and transaction building for decentralized news indexing
+---
+
+## Overview
+
+TUNA uses the **Sui blockchain** as its decentralized index layer. The `NewsRegistry` smart contract is deployed as a **Shared Object**, making it accessible to all users without gas fees for reading.
+
+<Info>
+**Sui Testnet Deployment**
+- Package: `0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66`
+- Registry: `0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d`
+- Network: Sui Testnet (`https://fullnode.testnet.sui.io:443`)
+</Info>
+
+## Sui Client Setup
+
+All interactions with Sui use the official `@mysten/sui.js` SDK:
+
+```typescript
+import { SuiClient } from '@mysten/sui.js/client';
+import { NETWORK_CONFIG, CONTRACT_CONFIG } from '../config';
+
+const suiClient = new SuiClient({ 
+  url: NETWORK_CONFIG.RPC_URL 
+});
+```
+
+<Note>
+The `SuiClient` is used for **reading** data. For **writing** transactions, you need a wallet connection (e.g., `@mysten/dapp-kit`).
+</Note>
+
+## Reading the NewsRegistry
+
+### Fetching the Registry Object
+
+The NewsRegistry is a Shared Object that can be queried by anyone:
+
+```typescript
+const registry = await suiClient.getObject({
+  id: CONTRACT_CONFIG.REGISTRY_ID,
+  options: { showContent: true }
+});
+
+if (registry.data?.content?.dataType === 'moveObject') {
+  const fields = registry.data.content.fields as any;
+  const latestBlobs = fields.latest_blobs as string[];
+  
+  console.log(`Registry contains ${latestBlobs.length} articles`);
+}
+```
+
+### Registry Structure
+
+The NewsRegistry contains several key fields:
+
+```move
+struct NewsRegistry has key {
+  id: UID,
+  latest_blobs: vector<String>,        // Array of Walrus blob IDs
+  engagement_map: VecMap<String, ArticleEngagement>,
+  admin_cap: ID,
+}
+
+struct ArticleEngagement has store {
+  total_tips: u64,
+  tip_count: u64,
+  comment_count: u64,
+}
+```
+
+### Extracting Blob IDs
+
+Articles are stored in chronological order. To get the most recent articles:
+
+```typescript
+// Get last 20 articles (newest first)
+const recentBlobIds = latestBlobs.slice(-20).reverse();
+
+// Get specific range
+const middleArticles = latestBlobs.slice(-100, -50);
+```
+
+## Writing Transactions
+
+TUNA provides several transaction builders in `src/lib/sui.ts` for user interactions:
+
+### Tipping an Article
+
+```typescript
+import { Transaction } from '@mysten/sui/transactions';
+import { createTipArticleTransaction, suiToMist } from '../lib/sui';
+
+// Create transaction
+const tx = createTipArticleTransaction(
+  blobId,
+  suiToMist(0.1) // Tip 0.1 SUI
+);
+
+// Sign and execute with wallet
+const result = await signAndExecuteTransaction({
+  transaction: tx,
+});
+```
+
+**Implementation details:**
+
+```typescript
+export function createTipArticleTransaction(
+  blobId: string, 
+  amount: number
+): Transaction {
+  const tx = new Transaction();
+  
+  // Split coins from gas for the tip
+  const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+  
+  tx.moveCall({
+    target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::tip_article`,
+    arguments: [
+      tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+      tx.pure.string(blobId),
+      tipCoin,
+    ],
+  });
+  
+  return tx;
+}
+```
+
+<Warning>
+Tip amounts must be at least `1_000_000 MIST` (0.001 SUI). Use `isValidTipAmount()` to validate.
+</Warning>
+
+### Posting Comments
+
+TUNA supports three types of comments:
+
+<Accordion title="1. Short Text Comments (≤280 chars)">
+  ```typescript
+  const tx = createPostCommentTransaction(
+    blobId,
+    "Great article! Thanks for sharing."
+  );
+  ```
+  
+  These comments are stored entirely on-chain in the Comment object.
+</Accordion>
+
+<Accordion title="2. Long Text Comments (>280 chars)">
+  ```typescript
+  // First upload to Walrus
+  const fullContent = { text: longCommentText, timestamp: Date.now() };
+  const contentBlobId = await uploadToWalrus(fullContent);
+  
+  // Then post with preview
+  const tx = createPostCommentWithBlobTransaction(
+    blobId,
+    previewText.slice(0, 280),
+    contentBlobId,
+    'text_long'
+  );
+  ```
+  
+  Preview is stored on-chain, full content on Walrus.
+</Accordion>
+
+<Accordion title="3. Media Comments">
+  ```typescript
+  // Upload media to Walrus
+  const imageBlobId = await uploadImageToWalrus(imageFile);
+  const mediaContent = {
+    text: "Check out this image!",
+    media: [{ type: 'image', url: getWalrusUrl(imageBlobId) }],
+    timestamp: Date.now()
+  };
+  const contentBlobId = await uploadToWalrus(mediaContent);
+  
+  // Post comment
+  const tx = createPostCommentWithBlobTransaction(
+    blobId,
+    "Check out this image!",
+    contentBlobId,
+    'media'
+  );
+  ```
+</Accordion>
+
+### Comment Tipping and Withdrawal
+
+Comments are individual objects that can receive tips:
+
+```typescript
+// Tip a comment
+const tipTx = createTipCommentTransaction(
+  commentId,
+  suiToMist(0.05)
+);
+
+// Author withdraws tips
+const withdrawTx = createWithdrawCommentTipsTransaction(commentId);
+```
+
+## Transaction Utilities
+
+TUNA provides helper functions for working with SUI amounts:
+
+```typescript
+// Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
+const mist = suiToMist(0.1); // 100_000_000
+
+// Convert MIST to SUI
+const sui = mistToSui(100_000_000); // 0.1
+
+// Format for display
+const display = formatSui(100_000_000); // "0.100 SUI"
+const tiny = formatSui(500); // "< 0.001 SUI"
+```
+
+## Move Call Structure
+
+All TUNA transactions follow this pattern:
+
+```typescript
+tx.moveCall({
+  target: `${PACKAGE_ID}::${MODULE_NAME}::${FUNCTION_NAME}`,
+  arguments: [
+    // Sui objects
+    tx.object(REGISTRY_ID),
+    
+    // Pure values (strings, numbers)
+    tx.pure.string(blobId),
+    tx.pure.u64(amount),
+    
+    // Coin arguments
+    coinObject,
+  ],
+});
+```
+
+<Info>
+The `target` format is `package_id::module_name::function_name`. All TUNA functions are in the `news_registry` module.
+</Info>
+
+## Querying Engagement Data
+
+Article engagement (tips, comments) is stored in the registry's `engagement_map`:
+
+```typescript
+async function getArticleEngagement(blobId: string) {
+  const registry = await suiClient.getObject({
+    id: CONTRACT_CONFIG.REGISTRY_ID,
+    options: { showContent: true },
+  });
+  
+  const fields = registry.data.content.fields as any;
+  const engagementMap = fields.engagement_map as any;
+  
+  // VecMap structure: { contents: [{ key, value }] }
+  const engagement = engagementMap.contents?.find(
+    (item: any) => item.key === blobId
+  );
+  
+  return {
+    totalTips: parseInt(engagement?.value.total_tips || '0'),
+    tipCount: parseInt(engagement?.value.tip_count || '0'),
+    commentCount: parseInt(engagement?.value.comment_count || '0'),
+  };
+}
+```
+
+## Gas Considerations
+
+- **Reading**: Free! No gas required for querying Shared Objects
+- **Tipping**: Gas + tip amount (typically ~0.001 SUI gas)
+- **Commenting**: Gas only (typically ~0.001-0.002 SUI)
+- **Uploading to Walrus**: Free on testnet, may have costs on mainnet
+
+<Note>
+Walrus upload costs are handled by the Walrus network, not Sui gas fees.
+</Note>
+
+## React Integration
+
+TUNA uses `@tanstack/react-query` for data fetching:
+
+```typescript
+import { useLatestNews } from '../hooks/useNews';
+
+function NewsFeed() {
+  const { data: articles, isLoading, error } = useLatestNews(50);
+  
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading news</div>;
+  
+  return (
+    <div>
+      {articles?.map(article => (
+        <ArticleCard key={article.id} article={article} />
+      ))}
+    </div>
+  );
+}
+```
+
+The `useLatestNews` hook automatically:
+1. Fetches the registry from Sui
+2. Extracts blob IDs
+3. Fetches content from Walrus in parallel
+4. Merges engagement data
+5. Caches results for 30 seconds
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Walrus Storage" icon="database" href="/concepts/walrus-storage">
+    Learn how content is stored
+  </Card>
+  <Card title="NewsRegistry Contract" icon="file-contract" href="/concepts/news-registry">
+    Understand the Move contract
+  </Card>
+  <Card title="Integration Guide" icon="code" href="/integration/overview">
+    Build with TUNA
+  </Card>
+</CardGroup>

@@ -1,0 +1,206 @@
+---
+title: "useLatestNews"
+description: "Fetch and display the latest news articles from the TUNA registry"
+---
+
+## Overview
+
+The `useLatestNews` hook fetches the latest news articles from the Sui blockchain registry and retrieves their full content from Walrus storage. It automatically includes engagement data (tips and comments) for each article.
+
+## Function Signature
+
+```typescript
+function useLatestNews(limit?: number): UseQueryResult<NewsArticle[], Error>
+```
+
+## Parameters
+
+<ParamField path="limit" type="number" default="100">
+  Maximum number of articles to fetch. Articles are returned in reverse chronological order (newest first).
+</ParamField>
+
+## Return Type
+
+Returns a React Query `UseQueryResult` object containing:
+
+<ResponseField name="data" type="NewsArticle[]">
+  Array of news articles with full content and engagement data
+
+  <ResponseField name="id" type="string">
+    Unique identifier for the article (same as blob_id)
+  </ResponseField>
+
+  <ResponseField name="blob_id" type="string">
+    Walrus blob ID containing the article content
+  </ResponseField>
+
+  <ResponseField name="title" type="string">
+    Article title
+  </ResponseField>
+
+  <ResponseField name="category" type="string">
+    Article category (currently defaults to 'General')
+  </ResponseField>
+
+  <ResponseField name="source" type="'twitter' | 'rss' | 'onchain'">
+    Source of the article
+  </ResponseField>
+
+  <ResponseField name="timestamp" type="number">
+    Unix timestamp when the article was published
+  </ResponseField>
+
+  <ResponseField name="content" type="string" optional>
+    Full article content fetched from Walrus
+  </ResponseField>
+
+  <ResponseField name="summary" type="string" optional>
+    Article summary or excerpt
+  </ResponseField>
+
+  <ResponseField name="url" type="string" optional>
+    Original article URL
+  </ResponseField>
+
+  <ResponseField name="image" type="string" optional>
+    Article cover image URL
+  </ResponseField>
+
+  <ResponseField name="author" type="string" optional>
+    Article author name
+  </ResponseField>
+
+  <ResponseField name="totalTips" type="number">
+    Total tips received in SUI tokens
+  </ResponseField>
+
+  <ResponseField name="tipCount" type="number">
+    Number of tips received
+  </ResponseField>
+
+  <ResponseField name="commentCount" type="number">
+    Number of comments on the article
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="isLoading" type="boolean">
+  Whether the query is currently loading
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  Error object if the query failed
+</ResponseField>
+
+<ResponseField name="refetch" type="() => Promise<void>">
+  Function to manually refetch the articles
+</ResponseField>
+
+## Usage
+
+<CodeGroup>
+
+```tsx Basic Usage
+import { useLatestNews } from '@tuna/sdk';
+
+function NewsFeed() {
+  const { data: articles, isLoading, error } = useLatestNews();
+
+  if (isLoading) return <div>Loading articles...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      {articles?.map((article) => (
+        <article key={article.id}>
+          <h2>{article.title}</h2>
+          <p>{article.summary}</p>
+          <div>
+            <span>💰 {article.totalTips} SUI</span>
+            <span>💬 {article.commentCount} comments</span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+```
+
+```tsx Custom Limit
+import { useLatestNews } from '@tuna/sdk';
+
+function TopStories() {
+  // Fetch only the 10 most recent articles
+  const { data: articles } = useLatestNews(10);
+
+  return (
+    <div>
+      <h1>Top 10 Stories</h1>
+      {articles?.map((article) => (
+        <div key={article.id}>
+          {article.image && <img src={article.image} alt={article.title} />}
+          <h3>{article.title}</h3>
+          <p>By {article.author}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+```tsx With Refetch
+import { useLatestNews } from '@tuna/sdk';
+
+function NewsFeedWithRefresh() {
+  const { data: articles, isLoading, refetch } = useLatestNews(50);
+
+  return (
+    <div>
+      <button onClick={() => refetch()} disabled={isLoading}>
+        {isLoading ? 'Refreshing...' : 'Refresh Feed'}
+      </button>
+      
+      {articles?.map((article) => (
+        <article key={article.id}>
+          <h2>{article.title}</h2>
+          <small>Source: {article.source}</small>
+          <p>{article.content}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+```
+
+</CodeGroup>
+
+## Query Configuration
+
+The hook is configured with the following React Query options:
+
+- **Query Key**: `['latestNews', limit]`
+- **Stale Time**: 30 seconds (data is considered fresh for 30 seconds)
+- **Caching**: Automatically cached by React Query based on the limit parameter
+
+<Note>
+  The hook fetches articles in batches and retrieves full content from Walrus for each article. This may take a few seconds for large limit values.
+</Note>
+
+## Error Handling
+
+If individual articles fail to fetch, they are filtered out of the results. The hook will return all successfully fetched articles rather than failing completely.
+
+```tsx
+const { data: articles, error } = useLatestNews();
+
+// articles may contain fewer items than the limit
+// if some articles failed to fetch
+if (articles) {
+  console.log(`Successfully fetched ${articles.length} articles`);
+}
+```
+
+## See Also
+
+- [useArticle](/hooks/use-article) - Fetch a single article by ID
+- [useArticleComments](/hooks/use-comments) - Fetch comments for an article
+- [NewsArticle Type](/types#newsarticle) - Full type definition

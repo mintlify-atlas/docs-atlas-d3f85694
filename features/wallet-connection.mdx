@@ -1,0 +1,501 @@
+---
+title: Wallet Connection
+description: Integrate Sui wallet connectivity into your TUNA application using @mysten/dapp-kit
+---
+
+TUNA uses the `@mysten/dapp-kit` to provide seamless wallet connectivity for Sui blockchain interactions. This enables users to connect wallets, sign transactions, and interact with on-chain features.
+
+## Overview
+
+The Sui dApp Kit provides:
+
+- **Wallet Connection**: Connect to Sui Wallet, Suiet, Ethos, and other compatible wallets
+- **Transaction Signing**: Sign and execute blockchain transactions
+- **Account Management**: Access current wallet address and balance
+- **Network Configuration**: Support for testnet, devnet, and mainnet
+
+<Note>
+The dApp Kit handles wallet detection, connection state, and transaction signing automatically.
+</Note>
+
+## Installation
+
+Install the required dependencies:
+
+```bash
+npm install @mysten/dapp-kit @mysten/sui.js @tanstack/react-query
+```
+
+## Provider Setup
+
+Wrap your application with the required providers:
+
+```tsx src/main.tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
+import { getFullnodeUrl } from '@mysten/sui.js/client';
+import '@mysten/dapp-kit/dist/index.css';
+
+const queryClient = new QueryClient();
+
+const networks = {
+  testnet: { url: getFullnodeUrl('testnet') },
+  mainnet: { url: getFullnodeUrl('mainnet') },
+};
+
+function Root() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <SuiClientProvider networks={networks} defaultNetwork="testnet">
+        <WalletProvider>
+          <App />
+        </WalletProvider>
+      </SuiClientProvider>
+    </QueryClientProvider>
+  );
+}
+```
+
+<Steps>
+  <Step title="QueryClientProvider">
+    Provides React Query for data fetching and caching
+  </Step>
+  
+  <Step title="SuiClientProvider">
+    Configures Sui RPC endpoints for blockchain queries
+  </Step>
+  
+  <Step title="WalletProvider">
+    Enables wallet connection and management
+  </Step>
+</Steps>
+
+## Network Configuration
+
+Configure your network settings:
+
+```typescript src/config/index.ts
+export const NETWORK_CONFIG = {
+  NETWORK: (import.meta.env.VITE_SUI_NETWORK || 'testnet') as 'testnet' | 'mainnet' | 'devnet',
+  RPC_URL: import.meta.env.VITE_SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443',
+} as const;
+```
+
+<Tip>
+Use environment variables to easily switch between networks during development and production.
+</Tip>
+
+## Connecting a Wallet
+
+Use the `ConnectModal` component for wallet connection:
+
+```tsx
+import { ConnectModal, useCurrentAccount } from '@mysten/dapp-kit';
+import { useState } from 'react';
+
+function WalletButton() {
+  const account = useCurrentAccount();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      {!account ? (
+        <ConnectModal
+          trigger={
+            <button className="btn-primary">
+              Connect Wallet
+            </button>
+          }
+          open={open}
+          onOpenChange={setOpen}
+        />
+      ) : (
+        <div>
+          Connected: {account.address.slice(0, 6)}...{account.address.slice(-4)}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Getting Current Account
+
+Access the connected wallet address:
+
+```tsx
+import { useCurrentAccount } from '@mysten/dapp-kit';
+
+function UserProfile() {
+  const account = useCurrentAccount();
+
+  if (!account) {
+    return <p>Please connect your wallet</p>;
+  }
+
+  return (
+    <div>
+      <p>Address: {account.address}</p>
+      <p>Public Key: {account.publicKey}</p>
+    </div>
+  );
+}
+```
+
+## Signing Transactions
+
+Use the `useSignAndExecuteTransaction` hook to sign and submit transactions:
+
+```tsx
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { Transaction } from '@mysten/sui/transactions';
+
+function TipButton({ articleId, amount }: { articleId: string; amount: number }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  const handleTip = () => {
+    const tx = new Transaction();
+    
+    // Split coins for the tip
+    const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+    
+    tx.moveCall({
+      target: `${PACKAGE_ID}::news_registry::tip_article`,
+      arguments: [
+        tx.object(REGISTRY_ID),
+        tx.pure.string(articleId),
+        tipCoin,
+      ],
+    });
+
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Transaction successful:', result);
+          alert('Tip sent successfully!');
+        },
+        onError: (error) => {
+          console.error('Transaction failed:', error);
+          alert('Failed to send tip');
+        },
+      }
+    );
+  };
+
+  return <button onClick={handleTip}>Send Tip</button>;
+}
+```
+
+## Transaction Flow
+
+<Steps>
+  <Step title="Create Transaction">
+    Build a transaction using the Transaction builder:
+    
+    ```typescript
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${packageId}::${module}::${function}`,
+      arguments: [/* args */],
+    });
+    ```
+  </Step>
+  
+  <Step title="Request Signature">
+    Call `signAndExecute` to prompt the user's wallet:
+    
+    ```typescript
+    signAndExecute({ transaction: tx });
+    ```
+  </Step>
+  
+  <Step title="User Approves">
+    User reviews and approves the transaction in their wallet
+  </Step>
+  
+  <Step title="Execute On-Chain">
+    Transaction is submitted to the blockchain and executed
+  </Step>
+  
+  <Step title="Handle Result">
+    Process success or error callbacks:
+    
+    ```typescript
+    onSuccess: (result) => {
+      // Update UI, invalidate caches
+    },
+    onError: (error) => {
+      // Show error message
+    }
+    ```
+  </Step>
+</Steps>
+
+## Building Transactions
+
+### Simple Transfer
+
+```typescript
+import { Transaction } from '@mysten/sui/transactions';
+
+const tx = new Transaction();
+tx.transferObjects(
+  [tx.object(objectId)],
+  tx.pure.address(recipientAddress)
+);
+```
+
+### Split Coins
+
+```typescript
+const tx = new Transaction();
+const [coin] = tx.splitCoins(tx.gas, [amount]);
+```
+
+### Move Call
+
+```typescript
+const tx = new Transaction();
+tx.moveCall({
+  target: `${packageId}::${moduleName}::${functionName}`,
+  arguments: [
+    tx.object(objectId),
+    tx.pure.string(stringArg),
+    tx.pure.u64(numberArg),
+  ],
+  typeArguments: [], // Optional generic types
+});
+```
+
+## Contract Configuration
+
+Store contract addresses centrally:
+
+```typescript src/config/index.ts
+export const CONTRACT_CONFIG = {
+  PACKAGE_ID: import.meta.env.VITE_PACKAGE_ID || '0xadf0a6ce11dd75d3d44930ab5bf55781801dea2bfead056eb0bb59c1aa1e9e66',
+  REGISTRY_ID: import.meta.env.VITE_REGISTRY_ID || '0x68c01d2c08923d5257a5a9959d7c9250c4053dbe4641e229ccff2f35e6a3bb6d',
+  ADMIN_CAP_ID: import.meta.env.VITE_ADMIN_CAP_ID || '0x18d48d74bfddffbe3dc75025136722380f374baec942df2e0aef76cad1061496',
+  MODULE_NAME: 'news_registry',
+} as const;
+```
+
+## Querying the Blockchain
+
+Use the Sui client directly for read operations:
+
+```typescript
+import { SuiClient } from '@mysten/sui.js/client';
+import { NETWORK_CONFIG } from './config';
+
+const suiClient = new SuiClient({ url: NETWORK_CONFIG.RPC_URL });
+
+// Get object
+const object = await suiClient.getObject({
+  id: objectId,
+  options: { showContent: true },
+});
+
+// Multi-get objects
+const objects = await suiClient.multiGetObjects({
+  ids: [id1, id2, id3],
+  options: { showContent: true },
+});
+
+// Get events
+const events = await suiClient.queryEvents({
+  query: { MoveEventType: `${packageId}::${module}::${event}` },
+});
+```
+
+## Wallet Connection in CommentSection
+
+Example from the TUNA codebase:
+
+```tsx src/components/CommentSection.tsx
+import { useCurrentAccount, ConnectModal } from '@mysten/dapp-kit';
+
+function CommentSection({ articleId }: { articleId: string }) {
+  const account = useCurrentAccount();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      {!account ? (
+        <div>
+          <p>Login to join the conversation.</p>
+          <ConnectModal
+            trigger={
+              <button className="btn-primary">
+                GET STARTED
+              </button>
+            }
+            open={open}
+            onOpenChange={setOpen}
+          />
+        </div>
+      ) : (
+        <form onSubmit={handleCommentSubmit}>
+          {/* Comment form */}
+        </form>
+      )}
+    </div>
+  );
+}
+```
+
+## Error Handling
+
+Handle common wallet errors:
+
+```typescript
+signAndExecute(
+  { transaction: tx },
+  {
+    onError: (error) => {
+      if (error.message.includes('User rejected')) {
+        alert('Transaction was cancelled');
+      } else if (error.message.includes('Insufficient')) {
+        alert('Insufficient balance');
+      } else {
+        alert('Transaction failed. Please try again.');
+      }
+      console.error(error);
+    },
+  }
+);
+```
+
+## Loading States
+
+Show feedback during transaction signing:
+
+```tsx
+function TipButton() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  const handleClick = () => {
+    setIsSubmitting(true);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: () => {
+          setIsSubmitting(false);
+          alert('Success!');
+        },
+        onError: () => {
+          setIsSubmitting(false);
+          alert('Failed');
+        },
+      }
+    );
+  };
+
+  return (
+    <button onClick={handleClick} disabled={isSubmitting}>
+      {isSubmitting ? 'Processing...' : 'Send Tip'}
+    </button>
+  );
+}
+```
+
+## Disconnecting Wallet
+
+Allow users to disconnect:
+
+```tsx
+import { useDisconnectWallet, useCurrentAccount } from '@mysten/dapp-kit';
+
+function WalletMenu() {
+  const account = useCurrentAccount();
+  const { mutate: disconnect } = useDisconnectWallet();
+
+  if (!account) return null;
+
+  return (
+    <div>
+      <p>{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
+      <button onClick={() => disconnect()}>Disconnect</button>
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Check Connection" icon="check">
+    Always verify wallet is connected before transaction attempts
+  </Card>
+  
+  <Card title="Handle Rejections" icon="xmark">
+    Gracefully handle user-cancelled transactions
+  </Card>
+  
+  <Card title="Show Loading States" icon="spinner">
+    Provide visual feedback during signing and execution
+  </Card>
+  
+  <Card title="Cache Invalidation" icon="refresh">
+    Invalidate React Query caches after successful transactions
+  </Card>
+</CardGroup>
+
+## Testing
+
+Test wallet interactions:
+
+```typescript
+import { renderHook } from '@testing-library/react';
+import { useCurrentAccount } from '@mysten/dapp-kit';
+
+test('gets current account', () => {
+  const { result } = renderHook(() => useCurrentAccount());
+  expect(result.current).toBeDefined();
+});
+```
+
+## Troubleshooting
+
+### Wallet Not Detected
+
+Ensure the wallet extension is installed and enabled:
+
+```tsx
+if (!window.sui) {
+  alert('Please install Sui Wallet extension');
+}
+```
+
+### Transaction Fails
+
+Check common issues:
+- Insufficient gas balance
+- Invalid object IDs
+- Wrong network (testnet vs mainnet)
+- Incorrect function arguments
+
+### Network Mismatch
+
+Ensure wallet and dApp are on the same network:
+
+```typescript
+const expectedNetwork = 'testnet';
+if (account.network !== expectedNetwork) {
+  alert(`Please switch to ${expectedNetwork}`);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="News Feed" icon="newspaper" href="/features/news-feed">
+    Build the news feed interface
+  </Card>
+  <Card title="Article Tipping" icon="coins" href="/features/article-tipping">
+    Implement tipping with transactions
+  </Card>
+</CardGroup>

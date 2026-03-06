@@ -1,80 +1,289 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get TUNA running in 5 minutes and start exploring the Sui ecosystem news aggregator'
 ---
 
-## Get started in three steps
+<Note>
+  This guide will get you up and running with TUNA in just a few minutes. You'll connect your wallet, view the news feed, and tip your first article.
+</Note>
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Sui Wallet**: Install the [Sui Wallet browser extension](https://chrome.google.com/webstore/detail/sui-wallet)
+- **Testnet SUI**: Get testnet tokens from the [Sui Testnet Faucet](https://discord.gg/sui)
+- **Node.js 18+**: Download from [nodejs.org](https://nodejs.org/)
 
-### Step 2: Deploy your changes
+## Getting Started
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone and Install">
+    Clone the TUNA repository and install dependencies:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    git clone <repository-url>
+    cd tuna
+    npm install
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Tip>
+      You can also use `yarn` or `pnpm` if you prefer:
+      ```bash
+      yarn install
+      # or
+      pnpm install
+      ```
+    </Tip>
+  </Step>
 
-### Step 3: Go live
+  <Step title="Configure Environment">
+    Copy the example environment file:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    cp .env.example .env.local
+    ```
 
-## Next steps
+    The default configuration is already set up for testnet:
 
-Now that you have your docs running, explore these key features:
+    ```env
+    # Sui Network Configuration
+    VITE_SUI_NETWORK=testnet
+    VITE_SUI_RPC_URL=https://fullnode.testnet.sui.io:443
 
-<CardGroup cols={2}>
+    # Contract Addresses
+    VITE_PACKAGE_ID=0xc19c25a9e42f77c2466a1df42d99a160a65a8800711eef447bb8da441df33c9e
+    VITE_REGISTRY_ID=0x65fa3ee1fa53af68c36dd47b525392dfb844726af980f758c1b6dc353a30e962
+    VITE_ADMIN_CAP_ID=0x87c090e5a60dd505d3ef7634e6f32ced2134640f56b329946ab920a3a9299f6e
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+    # Walrus Configuration
+    VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space/v1/store
+    VITE_WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space/v1
+    ```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+    <Note>
+      These addresses point to the deployed TUNA contracts on Sui testnet. You don't need to change them unless you're deploying your own instance.
+    </Note>
+  </Step>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+  <Step title="Start Development Server">
+    Launch the development server:
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+    ```bash
+    npm run dev
+    ```
 
+    The app will be available at `http://localhost:5173`
+
+    <Tip>
+      The development server supports hot module replacement (HMR), so your changes will be reflected instantly.
+    </Tip>
+  </Step>
+
+  <Step title="Connect Your Wallet">
+    Open the app in your browser and:
+
+    1. Click **"Connect Wallet"** in the header
+    2. Select your Sui Wallet from the options
+    3. Approve the connection in the wallet popup
+    4. Verify you're connected to **testnet**
+
+    <Warning>
+      Make sure your Sui Wallet is set to **Testnet**. TUNA currently runs on Sui testnet only.
+    </Warning>
+  </Step>
+</Steps>
+
+## Your First Actions
+
+### View the News Feed
+
+Once connected, you'll see the latest news articles from the Sui ecosystem displayed in a card-based layout:
+
+```typescript
+import { useLatestNews } from './hooks/useNews';
+
+function NewsFeed() {
+  const { data: articles, isLoading } = useLatestNews(50);
+  
+  if (isLoading) return <div>Loading news...</div>;
+  
+  return (
+    <div>
+      {articles?.map(article => (
+        <NewsCard key={article.id} article={article} />
+      ))}
+    </div>
+  );
+}
+```
+
+Each article shows:
+- Title and summary
+- Category (DeFi, Gaming, NFT, Dev, Governance, General)
+- Publication date and source
+- Total tips received
+- Comment count
+
+### Tip an Article
+
+Support quality content by tipping articles with SUI:
+
+1. Click the **💰 TIP** button on any article
+2. Choose a quick amount (0.01, 0.05, 0.1, 0.5 SUI) or enter a custom amount
+3. Confirm the transaction in your Sui Wallet
+4. Wait for the transaction to complete
+
+<CodeGroup>
+```typescript Article Tipping (Frontend)
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { createTipArticleTransaction, suiToMist } from './lib/sui';
+
+function TipButton({ blobId }: { blobId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  
+  const handleTip = (amountInSui: number) => {
+    const tx = createTipArticleTransaction(blobId, suiToMist(amountInSui));
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: () => console.log('Tip sent!'),
+        onError: (error) => console.error('Tip failed:', error)
+      }
+    );
+  };
+  
+  return <button onClick={() => handleTip(0.1)}>Tip 0.1 SUI</button>;
+}
+```
+
+```typescript Transaction Builder (lib/sui.ts)
+export function createTipArticleTransaction(blobId: string, amount: number): Transaction {
+  const tx = new Transaction();
+
+  // Split coins for the tip
+  const [tipCoin] = tx.splitCoins(tx.gas, [amount]);
+
+  tx.moveCall({
+    target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::tip_article`,
+    arguments: [
+      tx.object(CONTRACT_CONFIG.REGISTRY_ID),
+      tx.pure.string(blobId),
+      tipCoin,
+    ],
+  });
+
+  return tx;
+}
+```
+</CodeGroup>
+
+### Read Full Articles
+
+Click **"READ ↗"** on any article card to:
+- View the complete article content
+- See all comments
+- Add your own comments
+- Tip the article or individual comments
+
+## Understanding the Architecture
+
+TUNA combines three key technologies:
+
+<CardGroup cols={3}>
+  <Card title="Sui Blockchain" icon="link">
+    Handles transactions, tips, comments, and article metadata on-chain
+  </Card>
+  
+  <Card title="Walrus Storage" icon="database">
+    Stores article content and media in a decentralized blob storage network
+  </Card>
+  
+  <Card title="React Frontend" icon="browser">
+    Modern UI built with React 19, TypeScript, and Vite for fast performance
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+### How It Works
+
+1. **Articles are stored** on Walrus (decentralized storage)
+2. **Metadata is registered** on-chain via the Sui smart contract
+3. **The frontend fetches** article IDs from the contract and content from Walrus
+4. **All interactions** (tips, comments) happen on-chain
+
+```typescript
+// Articles are fetched from both sources
+const registry = await suiClient.getObject({
+  id: CONTRACT_CONFIG.REGISTRY_ID,
+  options: { showContent: true },
+});
+
+const latestBlobs = fields.latest_blobs as string[];
+const walrusContent = await fetchFromWalrus<WalrusArticleContent>(blobId);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Learn about detailed installation options and configuration
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/concepts/architecture">
+    Understand how TUNA works under the hood
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/types">
+    Explore available hooks and utilities
+  </Card>
+  
+  <Card title="Sui Integration" icon="file-contract" href="/concepts/sui-integration">
+    Deep dive into the Sui smart contract integration
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No articles found">
+    The registry might be empty. Check that:
+    - You're connected to the correct network (testnet)
+    - The contract addresses in `.env.local` are correct
+    - Articles have been published to the registry
+  </Accordion>
+
+  <Accordion title="Wallet not connecting">
+    Ensure that:
+    - Sui Wallet extension is installed and unlocked
+    - Your wallet is set to **Testnet** mode
+    - You've approved the connection request
+    - Try refreshing the page
+  </Accordion>
+
+  <Accordion title="Transaction failed">
+    Common issues:
+    - Insufficient testnet SUI (get more from the faucet)
+    - Wrong network selected in wallet
+    - Gas price too low (usually handled automatically)
+  </Accordion>
+
+  <Accordion title="Articles not loading">
+    This could be due to:
+    - Walrus aggregator temporarily unavailable
+    - Network connectivity issues
+    - Invalid blob IDs in the registry
+    - Check browser console for detailed error messages
+  </Accordion>
+</AccordionGroup>
+
+## Get Help
+
+Need assistance?
+
+- **GitHub Issues**: Report bugs or request features
+- **Sui Discord**: Join the Sui community
+- **Documentation**: [Sui Docs](https://docs.sui.io) | [Walrus Docs](https://docs.walrus.site)
+
+<Tip>
+  You're now ready to explore the Sui ecosystem with TUNA! Start tipping articles and engaging with the community.
+</Tip>

@@ -1,0 +1,302 @@
+---
+title: "Types"
+description: "TypeScript type definitions and interfaces for TUNA"
+---
+
+## Overview
+
+TUNA provides strongly-typed interfaces for all data structures used in the platform. These types ensure type safety when working with articles, comments, and Walrus content.
+
+## NewsArticle
+
+Represents a news article in the TUNA platform.
+
+```typescript
+interface NewsArticle {
+  id: string;
+  blob_id: string;
+  title: string;
+  category: string;
+  source: 'twitter' | 'rss' | 'onchain';
+  timestamp: number;
+  content?: string;
+  summary?: string;
+  url?: string;
+  image?: string;
+  author?: string;
+  totalTips: number;
+  tipCount: number;
+  commentCount: number;
+}
+```
+
+### Required Fields
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the article
+</ResponseField>
+
+<ResponseField name="blob_id" type="string" required>
+  Walrus blob ID containing the full article content
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Article title
+</ResponseField>
+
+<ResponseField name="category" type="string" required>
+  Article category (e.g., 'DeFi', 'Gaming', 'NFT', 'Dev', 'Governance', 'General')
+</ResponseField>
+
+<ResponseField name="source" type="'twitter' | 'rss' | 'onchain'" required>
+  The source of the article
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  Unix timestamp when the article was published
+</ResponseField>
+
+<ResponseField name="totalTips" type="number" required>
+  Total tips received in MIST (1 SUI = 1,000,000,000 MIST)
+</ResponseField>
+
+<ResponseField name="tipCount" type="number" required>
+  Number of tips received
+</ResponseField>
+
+<ResponseField name="commentCount" type="number" required>
+  Number of comments on the article
+</ResponseField>
+
+### Optional Fields
+
+<ResponseField name="content" type="string">
+  Full article content (fetched from Walrus)
+</ResponseField>
+
+<ResponseField name="summary" type="string">
+  Article summary or excerpt
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Original article URL (for RSS/Twitter sources)
+</ResponseField>
+
+<ResponseField name="image" type="string">
+  Article featured image URL
+</ResponseField>
+
+<ResponseField name="author" type="string">
+  Article author name
+</ResponseField>
+
+---
+
+## Comment
+
+Represents a comment on an article.
+
+```typescript
+interface Comment {
+  id: string;
+  blob_id: string;
+  author: string;
+  preview_text: string;
+  content_blob_id: string | null;
+  comment_type: 'text' | 'text_long' | 'media';
+  timestamp: number;
+  tips_received: number;
+  fullContent?: {
+    text: string;
+    media?: Array<{
+      type: 'image' | 'video';
+      url: string;
+      caption?: string;
+    }>;
+  };
+}
+```
+
+### Required Fields
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the comment
+</ResponseField>
+
+<ResponseField name="blob_id" type="string" required>
+  The article blob ID this comment belongs to
+</ResponseField>
+
+<ResponseField name="author" type="string" required>
+  Wallet address of the comment author
+</ResponseField>
+
+<ResponseField name="preview_text" type="string" required>
+  Preview text of the comment (up to 280 characters)
+</ResponseField>
+
+<ResponseField name="content_blob_id" type="string | null" required>
+  Walrus blob ID for long text or media content (null for short text comments)
+</ResponseField>
+
+<ResponseField name="comment_type" type="'text' | 'text_long' | 'media'" required>
+  Type of comment:
+  - `text`: Short text comment (≤280 chars)
+  - `text_long`: Long text comment stored in Walrus
+  - `media`: Comment with attached media (images/videos)
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  Unix timestamp when the comment was posted
+</ResponseField>
+
+<ResponseField name="tips_received" type="number" required>
+  Total tips received in MIST
+</ResponseField>
+
+### Optional Fields
+
+<Expandable title="fullContent">
+  <ResponseField name="fullContent.text" type="string">
+    Full comment text (fetched from Walrus if content_blob_id exists)
+  </ResponseField>
+  
+  <ResponseField name="fullContent.media" type="Array">
+    Array of media attachments
+    
+    <Expandable title="Media item structure">
+      <ResponseField name="type" type="'image' | 'video'">
+        Type of media
+      </ResponseField>
+      
+      <ResponseField name="url" type="string">
+        URL to the media file
+      </ResponseField>
+      
+      <ResponseField name="caption" type="string">
+        Optional caption for the media
+      </ResponseField>
+    </Expandable>
+  </ResponseField>
+</Expandable>
+
+---
+
+## ArticleEngagement
+
+Aggregated engagement metrics for an article.
+
+```typescript
+interface ArticleEngagement {
+  totalTips: number;
+  tipCount: number;
+  commentCount: number;
+}
+```
+
+<ResponseField name="totalTips" type="number">
+  Total tips received in MIST
+</ResponseField>
+
+<ResponseField name="tipCount" type="number">
+  Number of tips received
+</ResponseField>
+
+<ResponseField name="commentCount" type="number">
+  Number of comments
+</ResponseField>
+
+---
+
+## WalrusArticleContent
+
+Structure for article content stored in Walrus.
+
+```typescript
+interface WalrusArticleContent {
+  title: string;
+  content: string;
+  summary?: string;
+  source: string;
+  url?: string;
+  image?: string;
+  author?: string;
+  timestamp: number;
+}
+```
+
+<ResponseField name="title" type="string" required>
+  Article title
+</ResponseField>
+
+<ResponseField name="content" type="string" required>
+  Full article content (can be HTML or plain text)
+</ResponseField>
+
+<ResponseField name="source" type="string" required>
+  Article source identifier
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  Unix timestamp
+</ResponseField>
+
+<ResponseField name="summary" type="string">
+  Article summary
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Original article URL
+</ResponseField>
+
+<ResponseField name="image" type="string">
+  Article image URL
+</ResponseField>
+
+<ResponseField name="author" type="string">
+  Author name
+</ResponseField>
+
+---
+
+## WalrusCommentContent
+
+Structure for comment content stored in Walrus.
+
+```typescript
+interface WalrusCommentContent {
+  text: string;
+  media?: Array<{
+    type: 'image' | 'video';
+    url: string;
+    caption?: string;
+  }>;
+  timestamp: number;
+}
+```
+
+<ResponseField name="text" type="string" required>
+  Full comment text
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  Unix timestamp when the comment was created
+</ResponseField>
+
+<ResponseField name="media" type="Array">
+  Array of media attachments (for media-type comments)
+  
+  <Expandable title="Media structure">
+    <ResponseField name="type" type="'image' | 'video'">
+      Type of media
+    </ResponseField>
+    
+    <ResponseField name="url" type="string">
+      URL to the media file
+    </ResponseField>
+    
+    <ResponseField name="caption" type="string">
+      Optional media caption
+    </ResponseField>
+  </Expandable>
+</ResponseField>

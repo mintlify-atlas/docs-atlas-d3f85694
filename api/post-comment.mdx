@@ -1,0 +1,238 @@
+---
+title: 'Post Comment'
+description: 'Post comments on articles with short or long content'
+---
+
+## Overview
+
+TUNA provides two functions for posting comments on articles:
+- **Short comments** (≤280 characters): Stored entirely on-chain
+- **Long comments** or comments with media: Preview stored on-chain, full content on Walrus
+
+## Short Comments
+
+### Function Signature
+
+```typescript
+function createPostCommentTransaction(blobId: string, commentText: string): Transaction
+```
+
+### Parameters
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article you're commenting on.
+</ParamField>
+
+<ParamField path="commentText" type="string" required>
+  The comment text. Must be 280 characters or less.
+</ParamField>
+
+### Move Call Structure
+
+```typescript
+tx.moveCall({
+    target: `${PACKAGE_ID}::news_registry::post_comment`,
+    arguments: [
+        tx.object(REGISTRY_ID),       // The news registry shared object
+        tx.pure.string(blobId),       // Article blob ID
+        tx.pure.string(commentText),  // Comment text (≤280 chars)
+    ],
+});
+```
+
+### Usage Example
+
+```typescript
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createPostCommentTransaction } from './lib/sui';
+import { CONSTANTS } from './config';
+
+function CommentForm({ blobId }: { blobId: string }) {
+  const [text, setText] = useState('');
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleSubmit = () => {
+    if (text.length > CONSTANTS.SHORT_COMMENT_THRESHOLD) {
+      alert('Comment too long! Use the long comment feature.');
+      return;
+    }
+    
+    const tx = createPostCommentTransaction(blobId, text);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Comment posted!', result.digest);
+          setText('');
+        },
+      }
+    );
+  };
+  
+  return (
+    <div>
+      <textarea 
+        value={text} 
+        onChange={(e) => setText(e.target.value)}
+        maxLength={280}
+      />
+      <p>{text.length}/280 characters</p>
+      <button onClick={handleSubmit}>Post Comment</button>
+    </div>
+  );
+}
+```
+
+## Long Comments with Blob Storage
+
+### Function Signature
+
+```typescript
+function createPostCommentWithBlobTransaction(
+    blobId: string,
+    previewText: string,
+    contentBlobId: string,
+    commentType: 'text_long' | 'media'
+): Transaction
+```
+
+### Parameters
+
+<ParamField path="blobId" type="string" required>
+  The Walrus blob ID of the article you're commenting on.
+</ParamField>
+
+<ParamField path="previewText" type="string" required>
+  A preview of the comment (≤280 characters) that will be stored on-chain. This appears in feeds without requiring Walrus access.
+</ParamField>
+
+<ParamField path="contentBlobId" type="string" required>
+  The Walrus blob ID containing the full comment content. Upload your content to Walrus first and use the returned blob ID here.
+</ParamField>
+
+<ParamField path="commentType" type="'text_long' | 'media'" required>
+  The type of comment:
+  - `'text_long'`: Long text content
+  - `'media'`: Comment with images, videos, or other media
+</ParamField>
+
+### Move Call Structure
+
+```typescript
+tx.moveCall({
+    target: `${PACKAGE_ID}::news_registry::post_comment_with_blob`,
+    arguments: [
+        tx.object(REGISTRY_ID),           // The news registry shared object
+        tx.pure.string(blobId),           // Article blob ID
+        tx.pure.string(previewText),      // Preview text (≤280 chars)
+        tx.pure.string(contentBlobId),    // Walrus blob ID for full content
+        tx.pure.string(commentType),      // 'text_long' or 'media'
+    ],
+});
+```
+
+### Usage Example
+
+```typescript
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createPostCommentWithBlobTransaction } from './lib/sui';
+import { uploadToWalrus } from './lib/walrus';
+
+function LongCommentForm({ blobId }: { blobId: string }) {
+  const [text, setText] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleSubmit = async () => {
+    setIsUploading(true);
+    
+    try {
+      // Upload full content to Walrus
+      const contentBlobId = await uploadToWalrus({
+        text: text,
+        timestamp: Date.now(),
+      });
+      
+      // Create preview (first 280 chars)
+      const preview = text.length > 280 
+        ? text.slice(0, 277) + '...'
+        : text;
+      
+      // Create transaction
+      const tx = createPostCommentWithBlobTransaction(
+        blobId,
+        preview,
+        contentBlobId,
+        'text_long'
+      );
+      
+      // Sign and execute
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: (result) => {
+            console.log('Long comment posted!', result.digest);
+            setText('');
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Failed to upload to Walrus:', error);
+      alert('Failed to post comment');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+  
+  return (
+    <div>
+      <textarea 
+        value={text} 
+        onChange={(e) => setText(e.target.value)}
+      />
+      <button onClick={handleSubmit} disabled={isUploading}>
+        {isUploading ? 'Uploading...' : 'Post Long Comment'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Comment Type Reference
+
+<ParamField path="text" type="string">
+  Short comment stored entirely on-chain (≤280 characters)
+</ParamField>
+
+<ParamField path="text_long" type="string">
+  Long text comment with preview on-chain and full content on Walrus
+</ParamField>
+
+<ParamField path="media" type="string">
+  Comment containing images, videos, or other media files stored on Walrus
+</ParamField>
+
+<Note>
+  The 280-character threshold (`CONSTANTS.SHORT_COMMENT_THRESHOLD`) matches Twitter's classic character limit and provides a good balance between on-chain storage costs and user experience.
+</Note>
+
+## Response
+
+Both functions create a Comment object on-chain with the following properties:
+- Unique comment ID
+- Author's address
+- Timestamp
+- Content (or preview + blob reference)
+- Tip balance (initially 0)
+
+<Warning>
+  Preview text must be 280 characters or less. The transaction will fail if the preview exceeds this limit.
+</Warning>
+
+## Hybrid Storage Benefits
+
+1. **Short comments**: Fast, fully on-chain, no external dependencies
+2. **Long comments**: Cost-effective, leverages Walrus for large content
+3. **Preview text**: Users can see comments without accessing Walrus
+4. **Media support**: Share images and videos in comments

@@ -1,0 +1,276 @@
+---
+title: 'Withdraw Comment Tips'
+description: 'Withdraw accumulated tips from your comments'
+---
+
+## Overview
+
+The `withdraw_comment_tips` function allows comment authors to withdraw accumulated tips from their comments. Tips are sent directly to the caller's address.
+
+## Function Signature
+
+```typescript
+function createWithdrawCommentTipsTransaction(commentId: string): Transaction
+```
+
+## Parameters
+
+<ParamField path="commentId" type="string" required>
+  The Sui object ID of the comment you want to withdraw tips from. You must be the owner of this comment to withdraw tips.
+</ParamField>
+
+## Move Call Structure
+
+The transaction builder creates a Move call with the following structure:
+
+```typescript
+tx.moveCall({
+    target: `${PACKAGE_ID}::news_registry::withdraw_comment_tips`,
+    arguments: [
+        tx.object(commentId),  // The comment object to withdraw from
+    ],
+});
+```
+
+<Note>
+  Only the comment author (owner of the Comment object) can call this function. The function checks ownership automatically.
+</Note>
+
+## Withdrawal Flow
+
+1. **User initiates withdrawal**: Call `createWithdrawCommentTipsTransaction` with the comment ID
+2. **Ownership verification**: The smart contract verifies the caller owns the comment
+3. **Balance check**: Contract checks if there are any tips to withdraw
+4. **Transfer**: All accumulated tips are transferred to the caller's address
+5. **Balance reset**: Comment's tip balance is reset to 0
+
+## Usage Example
+
+```typescript
+import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
+import { createWithdrawCommentTipsTransaction } from './lib/sui';
+
+function WithdrawButton({ commentId }: { commentId: string }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleWithdraw = () => {
+    const tx = createWithdrawCommentTipsTransaction(commentId);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Tips withdrawn!', result.digest);
+        },
+        onError: (error) => {
+          console.error('Failed to withdraw tips:', error);
+        },
+      }
+    );
+  };
+  
+  return (
+    <button onClick={handleWithdraw}>
+      Withdraw Tips
+    </button>
+  );
+}
+```
+
+## Advanced Example: Display Balance Before Withdrawal
+
+```typescript
+import { useSignAndExecuteTransactionBlock, useSuiClient } from '@mysten/dapp-kit';
+import { createWithdrawCommentTipsTransaction, formatSui } from './lib/sui';
+import { useState, useEffect } from 'react';
+
+function WithdrawTipsCard({ commentId }: { commentId: string }) {
+  const [balance, setBalance] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const client = useSuiClient();
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  // Fetch comment balance
+  useEffect(() => {
+    async function fetchBalance() {
+      try {
+        const object = await client.getObject({
+          id: commentId,
+          options: { showContent: true },
+        });
+        
+        if (object.data?.content?.dataType === 'moveObject') {
+          const fields = object.data.content.fields as any;
+          setBalance(Number(fields.tip_balance || 0));
+        }
+      } catch (error) {
+        console.error('Failed to fetch balance:', error);
+      }
+    }
+    
+    fetchBalance();
+  }, [commentId, client]);
+  
+  const handleWithdraw = async () => {
+    if (balance === 0) {
+      alert('No tips to withdraw');
+      return;
+    }
+    
+    setIsLoading(true);
+    const tx = createWithdrawCommentTipsTransaction(commentId);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log('Withdrawn!', result.digest);
+          setBalance(0);
+          setIsLoading(false);
+        },
+        onError: (error) => {
+          console.error('Failed:', error);
+          setIsLoading(false);
+        },
+      }
+    );
+  };
+  
+  return (
+    <div className="withdraw-card">
+      <h3>Your Tips</h3>
+      <p className="balance">{formatSui(balance)}</p>
+      <button 
+        onClick={handleWithdraw}
+        disabled={isLoading || balance === 0}
+      >
+        {isLoading ? 'Withdrawing...' : 'Withdraw Tips'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Recipient Handling
+
+The withdrawn tips are automatically sent to the transaction sender (the comment owner):
+
+- **Automatic recipient**: No need to specify a recipient address
+- **Direct transfer**: Tips go directly to your wallet
+- **Gas optimization**: Uses efficient coin merging on-chain
+
+```typescript
+// The smart contract handles the transfer automatically
+// Tips are sent to tx.sender (your address)
+```
+
+## Batch Withdrawal Example
+
+If you have multiple comments with tips, you can withdraw from all of them in a single transaction:
+
+```typescript
+import { Transaction } from '@mysten/sui/transactions';
+import { CONTRACT_CONFIG } from './config';
+
+function createBatchWithdrawTransaction(commentIds: string[]): Transaction {
+  const tx = new Transaction();
+  
+  // Add withdrawal call for each comment
+  commentIds.forEach(commentId => {
+    tx.moveCall({
+      target: `${CONTRACT_CONFIG.PACKAGE_ID}::${CONTRACT_CONFIG.MODULE_NAME}::withdraw_comment_tips`,
+      arguments: [
+        tx.object(commentId),
+      ],
+    });
+  });
+  
+  return tx;
+}
+
+// Usage
+function BatchWithdrawButton({ commentIds }: { commentIds: string[] }) {
+  const { mutate: signAndExecute } = useSignAndExecuteTransactionBlock();
+  
+  const handleBatchWithdraw = () => {
+    const tx = createBatchWithdrawTransaction(commentIds);
+    
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: (result) => {
+          console.log(`Withdrawn from ${commentIds.length} comments!`);
+        },
+      }
+    );
+  };
+  
+  return (
+    <button onClick={handleBatchWithdraw}>
+      Withdraw All Tips ({commentIds.length} comments)
+    </button>
+  );
+}
+```
+
+<Warning>
+  You must be the owner of the comment to withdraw tips. Attempting to withdraw from someone else's comment will fail with an ownership error.
+</Warning>
+
+## Response
+
+On successful execution, the transaction:
+- Transfers all accumulated tips to your address
+- Resets the comment's tip balance to 0
+- Emits a `WithdrawCommentTips` event
+- Returns a transaction digest
+
+<ResponseField name="digest" type="string">
+  The transaction digest that can be used to track the transaction on Sui Explorer
+</ResponseField>
+
+<ResponseField name="effects" type="object">
+  Transaction effects including:
+  - Status (success/failure)
+  - Gas used
+  - Coins received (the withdrawn tips)
+  - Modified objects (the comment object)
+</ResponseField>
+
+## Error Handling
+
+Common errors:
+- **Not owner**: You're trying to withdraw from someone else's comment
+- **Zero balance**: The comment has no tips to withdraw
+- **Invalid comment ID**: The comment object doesn't exist
+- **Insufficient gas**: Not enough SUI to pay for gas fees
+
+```typescript
+signAndExecute(
+  { transaction: tx },
+  {
+    onError: (error) => {
+      if (error.message.includes('ownership')) {
+        alert('You can only withdraw tips from your own comments');
+      } else if (error.message.includes('balance')) {
+        alert('No tips to withdraw');
+      } else if (error.message.includes('not found')) {
+        alert('Comment not found');
+      } else {
+        alert('Failed to withdraw: ' + error.message);
+      }
+    },
+  }
+);
+```
+
+## Best Practices
+
+1. **Check balance first**: Fetch the comment object to see the tip balance before attempting withdrawal
+2. **Handle zero balance**: Don't attempt withdrawal if the balance is 0 (wastes gas)
+3. **Batch withdrawals**: If you have multiple comments, use a single transaction to save on gas
+4. **Error feedback**: Provide clear feedback to users about why a withdrawal failed
+
+<Note>
+  Gas fees for withdrawals are typically very low (< 0.001 SUI). The withdrawn amount is sent directly to your address and can be used immediately.
+</Note>

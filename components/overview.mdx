@@ -1,0 +1,125 @@
+---
+title: 'Components Overview'
+description: 'Explore the React components that power TUNA news platform'
+---
+
+## Component Architecture
+
+TUNA is built with React and TypeScript, featuring reusable components for news display, user engagement, and layout. All components follow brutalist design principles with bold borders, shadows, and high contrast.
+
+## Core Components
+
+<CardGroup cols={2}>
+  <Card title="NewsCard" icon="newspaper" href="/components/news-card">
+    Displays news articles with images, metadata, and engagement actions
+  </Card>
+  
+  <Card title="TipModal" icon="dollar-sign" href="/components/tip-modal">
+    Modal interface for tipping articles with SUI tokens
+  </Card>
+  
+  <Card title="CommentSection" icon="comments" href="/components/comment-section">
+    Full-featured commenting system with wallet authentication
+  </Card>
+  
+  <Card title="Header & Footer" icon="layer-group" href="/components/header-footer">
+    Navigation, wallet connection, and footer layout components
+  </Card>
+</CardGroup>
+
+## Component Hierarchy
+
+```
+App
+├── Header
+│   ├── Logo
+│   ├── Navigation (Latest/Trending)
+│   └── ConnectModal (Wallet)
+├── NewsCard (multiple)
+│   ├── Category Tag
+│   ├── Article Content
+│   └── TipModal (conditional)
+├── ArticleDetail
+│   ├── Article Content
+│   └── CommentSection
+│       ├── Comment Form
+│       └── Comment List
+└── Footer
+    ├── About Links
+    └── Social Links
+```
+
+## Design System
+
+### Brutalist Style
+All components share these design characteristics:
+
+- **Bold borders**: 2-4px solid black borders
+- **Box shadows**: Offset shadows (e.g., `4px 4px 0 black`)
+- **High contrast**: Black borders on colored backgrounds
+- **Sharp corners**: No border radius
+- **Monospace fonts**: Used for metadata and labels
+
+### Animation
+Components use GSAP for animations:
+
+- **Entrance animations**: Fade and slide on scroll
+- **Hover effects**: Lift and shadow changes
+- **Smooth transitions**: 0.2-0.5s durations
+
+## Shared Dependencies
+
+### Essential Packages
+
+```tsx
+import { useCurrentAccount } from '@mysten/dapp-kit'
+import { Link } from 'react-router-dom'
+import gsap from 'gsap'
+import type { NewsArticle, Comment } from '../types'
+```
+
+### Type Definitions
+
+All components use TypeScript interfaces from `/src/types/index.ts`:
+
+- `NewsArticle`: Article data structure
+- `Comment`: Comment data structure
+- Component-specific props interfaces
+
+## CSS Methodology
+
+Each component has a dedicated CSS file:
+
+- `NewsCard.css`
+- `TipModal.css`
+- Component-specific utility classes
+- Global CSS variables for theming
+
+## State Management
+
+### Local State
+Components use React hooks for local state:
+
+```tsx
+const [isOpen, setIsOpen] = useState(false)
+const [amount, setAmount] = useState(0.01)
+```
+
+### Global Hooks
+Custom hooks from `/hooks`:
+
+- `useArticleComments`: Fetch article comments
+- `usePostComment`: Submit new comments
+- `useSignAndExecuteTransaction`: Execute blockchain transactions
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Explore NewsCard" icon="newspaper" href="/components/news-card">
+    Learn about article display and engagement
+  </Card>
+  
+  <Card title="Implement Tipping" icon="dollar-sign" href="/components/tip-modal">
+    Add token tipping to your application
+  </Card>
+</CardGroup>
