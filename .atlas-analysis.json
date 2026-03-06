@@ -1,0 +1,129 @@
+{
+  "projectType": "frontend",
+  "projectName": "TUNA",
+  "projectDescription": "A decentralized news aggregator for the Sui ecosystem with article tipping and commenting features.",
+  "theme": "palm",
+  "primaryColor": "#14354d",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/sui-integration",
+              "concepts/walrus-storage",
+              "concepts/news-registry"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/news-feed",
+              "features/article-tipping",
+              "features/comments",
+              "features/wallet-connection"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "components/overview",
+              "components/news-card",
+              "components/tip-modal",
+              "components/comment-section",
+              "components/header-footer"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integration",
+        "groups": [
+          {
+            "group": "Developer Guide",
+            "pages": [
+              "integration/overview",
+              "integration/setup",
+              "integration/fetching-news",
+              "integration/transactions"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "hooks/use-news",
+              "hooks/use-comments",
+              "hooks/use-article"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "utils/sui-helpers",
+              "utils/walrus-helpers",
+              "utils/formatting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Contract Functions",
+            "pages": [
+              "api/tip-article",
+              "api/post-comment",
+              "api/tip-comment",
+              "api/withdraw-tips"
+            ]
+          },
+          {
+            "group": "TypeScript API",
+            "pages": [
+              "api/types",
+              "api/config",
+              "api/transactions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Decentralized news aggregation from Sui ecosystem sources",
+    "Article tipping with SUI tokens on Sui blockchain",
+    "Commenting system with on-chain and Walrus storage",
+    "Hybrid storage: short content on-chain, long content on Walrus",
+    "React hooks for news fetching and blockchain interactions",
+    "Sui wallet integration with @mysten/dapp-kit",
+    "Modern React 19 UI with TypeScript and Vite"
+  ],
+  "publicApiSurface": [
+    "useLatestNews(limit)",
+    "useArticle(blobId)",
+    "useArticleComments(blobId)",
+    "usePostComment()",
+    "createTipArticleTransaction(blobId, amount)",
+    "createPostCommentTransaction(blobId, text)",
+    "createTipCommentTransaction(commentId, amount)",
+    "uploadToWalrus(content)",
+    "fetchFromWalrus(blobId)",
+    "suiToMist(sui)",
+    "mistToSui(mist)",
+    "formatSui(mist)"
+  ]
+}
